@@ -1,0 +1,2 @@
+# WSL から実行するシェルスクリプトは常に LF
+*.sh text eol=lf

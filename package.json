@@ -1,0 +1,46 @@
+{
+  "name": "idle_dungeon",
+  "author": "hirayama-d",
+  "version": "1.1.0",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Idle Dungeon",
+    "uuid": "6a94ff7c-7661-4094-a8f0-e2b4701e09dd",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "basalt",
+      "chalk",
+      "emery",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "capabilities": [],
+    "resources": {
+      "media": [
+        { "type": "bitmap", "name": "IMG_APP_ICON", "file": "images/app_icon.png", "menuIcon": true },
+        { "type": "bitmap", "name": "IMG_ITEMS", "file": "images/items.png" },
+        { "type": "bitmap", "name": "IMG_CHEST", "file": "images/chest.png" },
+        { "type": "bitmap", "name": "IMG_ENEMY0", "file": "images/enemy0.png" },
+        { "type": "bitmap", "name": "IMG_ENEMY1", "file": "images/enemy1.png" },
+        { "type": "bitmap", "name": "IMG_ENEMY2", "file": "images/enemy2.png" },
+        { "type": "bitmap", "name": "IMG_ENEMY3", "file": "images/enemy3.png" },
+        { "type": "bitmap", "name": "IMG_ENEMY4", "file": "images/enemy4.png" },
+        { "type": "bitmap", "name": "IMG_ENEMY5", "file": "images/enemy5.png" },
+        { "type": "bitmap", "name": "IMG_BG_DUNGEON0", "file": "images/bg_dungeon0.png", "memoryFormat": "8Bit" },
+        { "type": "bitmap", "name": "IMG_BG_DUNGEON1", "file": "images/bg_dungeon1.png", "memoryFormat": "8Bit" },
+        { "type": "bitmap", "name": "IMG_BG_DUNGEON2", "file": "images/bg_dungeon2.png", "memoryFormat": "8Bit" },
+        { "type": "bitmap", "name": "IMG_BG_DUNGEON3", "file": "images/bg_dungeon3.png", "memoryFormat": "8Bit" },
+        { "type": "bitmap", "name": "IMG_BG_DUNGEON4", "file": "images/bg_dungeon4.png", "memoryFormat": "8Bit" },
+        { "type": "bitmap", "name": "IMG_BG_DUNGEON5", "file": "images/bg_dungeon5.png", "memoryFormat": "8Bit" },
+        { "type": "bitmap", "name": "IMG_BG_TOWN", "file": "images/bg_town.png" },
+        { "type": "bitmap", "name": "IMG_BG_SHOP", "file": "images/bg_shop.png" },
+        { "type": "bitmap", "name": "IMG_SHOPKEEPER", "file": "images/shopkeeper.png" }
+      ]
+    }
+  }
+}

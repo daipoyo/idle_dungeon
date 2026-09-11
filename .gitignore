@@ -1,0 +1,9 @@
+# Pebble のビルド成果物
+build/
+.lock-waf*
+
+# Python
+__pycache__/
+*.pyc
+
+node_modules/
