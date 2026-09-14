@@ -10,12 +10,6 @@
 //   購入・売却: 女主人の顔とセリフ付きのアイテム一覧
 // ============================================================
 
-// 女主人の画像内での右目の位置（ウインク用。tools/art_shopkeeper.py と対応）
-#define KEEPER_WINK_X 51
-#define KEEPER_WINK_Y 27
-#define WINK_INTERVAL_MS 4200
-#define WINK_MS 350
-
 typedef enum { OPT_BUY, OPT_SELL, OPT_TALK, OPT_COUNT } ShopOption;
 static const char *const OPTION_LABELS[OPT_COUNT] = { "Buy", "Sell", "Talk" };
 
@@ -45,11 +39,8 @@ static const char *s_speech;
 // ---- 店頭 ----
 static Window *s_front_window;
 static Layer *s_front_layer;
-static GBitmap *s_shop_bg, *s_wall, *s_counter;
-static GBitmap *s_keeper;
+static GBitmap *s_scene;          // 店内の一枚絵（画面と同じ大きさ）
 static ShopOption s_option;
-static bool s_wink;
-static AppTimer *s_wink_timer;
 
 // ---- 一覧（購入・売却で共用） ----
 typedef enum { LIST_BUY, LIST_SELL } ListMode;
@@ -64,36 +55,9 @@ static const char *pick(const char *const *lines, int n) {
 }
 
 // ============================================================
-// 女主人の描画
-// ============================================================
-static void draw_wink(GContext *ctx, int kx, int ky) {
-  int x = kx + KEEPER_WINK_X;
-  int y = ky + KEEPER_WINK_Y;
-  graphics_context_set_fill_color(ctx, GColorMelon);
-  graphics_fill_rect(ctx, GRect(x, y, 7, 6), 0, GCornerNone);
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_rect(ctx, GRect(x, y + 2, 1, 1), 0, GCornerNone);
-  graphics_fill_rect(ctx, GRect(x + 1, y + 3, 5, 1), 0, GCornerNone);
-  graphics_fill_rect(ctx, GRect(x + 6, y + 2, 1, 1), 0, GCornerNone);
-  graphics_fill_rect(ctx, GRect(x + 7, y + 1, 1, 1), 0, GCornerNone);
-}
-
-static void wink_timer_cb(void *data);
-
-static void schedule_wink(int ms) {
-  if (s_wink_timer) app_timer_cancel(s_wink_timer);
-  s_wink_timer = app_timer_register(ms, wink_timer_cb, NULL);
-}
-
-static void wink_timer_cb(void *data) {
-  s_wink_timer = NULL;
-  s_wink = !s_wink;
-  if (s_front_layer) layer_mark_dirty(s_front_layer);
-  schedule_wink(s_wink ? WINK_MS : WINK_INTERVAL_MS);
-}
-
-// ============================================================
 // 店頭画面
+//   店内の絵は画面と同じ大きさの一枚絵（機種ごとに別ファイル）。
+//   その上に会話ウィンドウを重ねる。
 // ============================================================
 static void front_update_proc(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
@@ -103,27 +67,13 @@ static void front_update_proc(Layer *layer, GContext *ctx) {
 #else
   int dlg_h = IS_LARGE_SCREEN ? 72 : 56;
 #endif
-  int counter_y = h - dlg_h - SHOP_COUNTER_H;
-  int keeper_y = counter_y - (KEEPER_H - 16);
-  int wall_top = counter_y - SHOP_WALL_H;
 
-  graphics_context_set_fill_color(ctx, gfx_argb(BG_SHOP_FILL));
+  graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, b, 0, GCornerNone);
-
-  // 壁紙とカウンターは中央揃えで横に並べる
-  int x0 = (w / 2 - BG_TILE_W / 2) % BG_TILE_W;
-  if (x0 > 0) x0 -= BG_TILE_W;
-  graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-  if (s_wall) graphics_draw_bitmap_in_rect(ctx, s_wall, GRect(x0, wall_top, w - x0, SHOP_WALL_H));
-
-  int kx = (w - KEEPER_W) / 2;
-  if (s_keeper) {
-    graphics_context_set_compositing_mode(ctx, GCompOpSet);
-    graphics_draw_bitmap_in_rect(ctx, s_keeper, GRect(kx, keeper_y, KEEPER_W, KEEPER_H));
-    if (s_wink) draw_wink(ctx, kx, keeper_y);
+  if (s_scene) {
+    graphics_context_set_compositing_mode(ctx, GCompOpAssign);
+    graphics_draw_bitmap_in_rect(ctx, s_scene, b);
   }
-  graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-  if (s_counter) graphics_draw_bitmap_in_rect(ctx, s_counter, GRect(x0, counter_y, w - x0, SHOP_COUNTER_H));
 
   // 会話ウィンドウ
   int inset = PBL_IF_ROUND_ELSE(w / 8, 2);
@@ -169,8 +119,6 @@ static void front_select(ClickRecognizerRef rec, void *ctx) {
     default: {
       const char *prev = s_speech;
       while (s_speech == prev) s_speech = pick(TALKS, ARRAY_LEN(TALKS));
-      s_wink = true;
-      schedule_wink(WINK_MS * 2);
       layer_mark_dirty(s_front_layer);
       break;
     }
@@ -194,19 +142,13 @@ static void front_click_config(void *ctx) {
 }
 
 static void front_load_art(void) {
-  if (!s_shop_bg) {
-    s_shop_bg = gbitmap_create_with_resource(RESOURCE_ID_IMG_BG_SHOP);
-    s_wall = gbitmap_create_as_sub_bitmap(s_shop_bg, GRect(0, 0, BG_TILE_W, SHOP_WALL_H));
-    s_counter = gbitmap_create_as_sub_bitmap(s_shop_bg, GRect(0, SHOP_WALL_H, BG_TILE_W, SHOP_COUNTER_H));
-  }
+  if (!s_scene) s_scene = gbitmap_create_with_resource(RESOURCE_ID_IMG_SHOP_SCENE);
 }
 
 static void front_unload_art(void) {
-  if (s_shop_bg) {
-    gbitmap_destroy(s_wall);
-    gbitmap_destroy(s_counter);
-    gbitmap_destroy(s_shop_bg);
-    s_wall = s_counter = s_shop_bg = NULL;
+  if (s_scene) {
+    gbitmap_destroy(s_scene);
+    s_scene = NULL;
   }
 }
 
@@ -215,25 +157,17 @@ static void front_window_load(Window *window) {
   s_front_layer = layer_create(layer_get_bounds(root));
   layer_set_update_proc(s_front_layer, front_update_proc);
   layer_add_child(root, s_front_layer);
-  s_keeper = gfx_keeper_acquire();
   s_option = OPT_BUY;
   s_speech = pick(GREETINGS, ARRAY_LEN(GREETINGS));
 }
 
 static void front_window_appear(Window *window) {
   front_load_art();
-  s_wink = false;
-  schedule_wink(WINK_INTERVAL_MS / 2);
   layer_mark_dirty(s_front_layer);
 }
 
 static void front_window_disappear(Window *window) {
-  // 一覧を開いている間は店内の背景を解放（女主人の画像は一覧でも使う）
-  if (s_wink_timer) {
-    app_timer_cancel(s_wink_timer);
-    s_wink_timer = NULL;
-  }
-  s_wink = false;
+  // 一覧を開いている間は店内の絵を解放する（一覧では顔だけを使う）
   front_unload_art();
 }
 
@@ -241,8 +175,6 @@ static void front_window_unload(Window *window) {
   layer_destroy(s_front_layer);
   s_front_layer = NULL;
   front_unload_art();
-  gfx_keeper_release();
-  s_keeper = NULL;
   window_destroy(window);
   s_front_window = NULL;
 }
@@ -397,10 +329,8 @@ static void list_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
   gfx_items_acquire();
-  GBitmap *keeper = gfx_keeper_acquire();
-  // 顔のあたりを切り出して使う
-  int crop_h = LIST_HEADER_H - 2;
-  s_face = gbitmap_create_as_sub_bitmap(keeper, GRect(KEEPER_W / 2 - FACE_W / 2, 1, FACE_W, crop_h));
+  // 顔の画像は見出しの枠に合わせた大きさで用意してある（tools/shop_art.py）
+  s_face = gfx_keeper_acquire();
 
   s_list_header = layer_create(GRect(0, 0, b.size.w, LIST_HEADER_H));
   layer_set_update_proc(s_list_header, list_header_update_proc);
@@ -426,8 +356,7 @@ static void list_window_unload(Window *window) {
   s_list_menu = NULL;
   layer_destroy(s_list_header);
   s_list_header = NULL;
-  gbitmap_destroy(s_face);
-  s_face = NULL;
+  s_face = NULL;            // 実体は gfx 側が持っているので破棄しない
   gfx_keeper_release();
   gfx_items_release();
   window_destroy(window);

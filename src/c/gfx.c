@@ -157,7 +157,7 @@ static int s_keeper_refs;
 
 GBitmap *gfx_keeper_acquire(void) {
   if (s_keeper_refs++ == 0) {
-    s_keeper = gbitmap_create_with_resource(RESOURCE_ID_IMG_SHOPKEEPER);
+    s_keeper = gbitmap_create_with_resource(RESOURCE_ID_IMG_KEEPER_FACE);
   }
   return s_keeper;
 }

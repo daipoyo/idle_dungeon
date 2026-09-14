@@ -38,8 +38,8 @@
         { "type": "bitmap", "name": "IMG_BG_DUNGEON4", "file": "images/bg_dungeon4.png", "memoryFormat": "8Bit" },
         { "type": "bitmap", "name": "IMG_BG_DUNGEON5", "file": "images/bg_dungeon5.png", "memoryFormat": "8Bit" },
         { "type": "bitmap", "name": "IMG_BG_TOWN", "file": "images/bg_town.png" },
-        { "type": "bitmap", "name": "IMG_BG_SHOP", "file": "images/bg_shop.png" },
-        { "type": "bitmap", "name": "IMG_SHOPKEEPER", "file": "images/shopkeeper.png" }
+        { "type": "bitmap", "name": "IMG_SHOP_SCENE", "file": "images/shop_scene.png" },
+        { "type": "bitmap", "name": "IMG_KEEPER_FACE", "file": "images/keeper_face.png" }
       ]
     }
   }

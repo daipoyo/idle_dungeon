@@ -3,10 +3,10 @@
 
 // 背景画像より画面が高いときに上側を塗る色 (argb)
 #define BG_DUNGEON0_FILL 0xC0
-#define BG_DUNGEON1_FILL 0xC1
-#define BG_DUNGEON2_FILL 0xD2
+#define BG_DUNGEON1_FILL 0xC0
+#define BG_DUNGEON2_FILL 0xD4
 #define BG_DUNGEON3_FILL 0xC0
-#define BG_DUNGEON4_FILL 0xCB
+#define BG_DUNGEON4_FILL 0xC0
 #define BG_DUNGEON5_FILL 0xC0
 #define BG_TOWN_FILL 0xDB
 #define BG_SHOP_FILL 0xC0

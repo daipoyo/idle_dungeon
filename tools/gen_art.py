@@ -41,12 +41,17 @@ WEAPON_PAL = [
     {'4': 'g', '5': 'W', '6': 'o'},   # Axe
 ]
 
-# 背景画像の上に空きができる大きい画面用の塗り色
+# 背景画像の上に空きができる大きい画面用の塗り色。
+# ダンジョンの背景は tools/dungeon_art.py が作った画像を使っているので、
+# ここの値もその画像の上端の色に合わせてある（同スクリプトが出力する）。
 SCENE_FILL = {
-    'bg_dungeon0': 'K', 'bg_dungeon1': 'N', 'bg_dungeon2': 'X',
-    'bg_dungeon3': 'K', 'bg_dungeon4': 'U', 'bg_dungeon5': 'K',
+    'bg_dungeon0': 'K', 'bg_dungeon1': 'K', 'bg_dungeon2': 'a',
+    'bg_dungeon3': 'K', 'bg_dungeon4': 'K', 'bg_dungeon5': 'K',
     'bg_town': 'u', 'bg_shop': 'K',
 }
+
+# これらは外部で用意した画像に置き換えたので、このスクリプトでは書き出さない
+EXTERNAL_ART = ('bg_dungeon', 'bg_shop')
 
 
 def argb8(c):
@@ -204,11 +209,14 @@ def main():
     # --- 背景 ---
     scenes = art_scenes.make_all()
     for name, img in scenes.items():
+        if name.startswith(EXTERNAL_ART):
+            continue
         out(name + '.png', img)
 
     # --- 店主 ---
+    # 店の絵は外部で用意した一枚絵（tools/shop_art.py）に置き換えたので、
+    # ここでは書き出さない。プレビューの確認用にだけ作る。
     keeper = art_shopkeeper.make()
-    out('shopkeeper.png', keeper)
 
     for name, size, n in report:
         print('%-18s %3dx%-3d colors=%d%s' % (name, size[0], size[1], n, '' if n <= 16 else '  (8bit)'))
