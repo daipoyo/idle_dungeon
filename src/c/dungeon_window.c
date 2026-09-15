@@ -24,9 +24,9 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   bool unlocked = game_dungeon_unlocked(i);
   static char sub[32];
   if (unlocked) {
-    snprintf(sub, sizeof(sub), "Power %d / %ds", d->required_power, d->clear_time_sec);
+    snprintf(sub, sizeof(sub), "POW %d %ds", d->required_power, d->clear_time_sec);
   } else {
-    snprintf(sub, sizeof(sub), "LOCKED: need %d", d->required_power);
+    snprintf(sub, sizeof(sub), "NEED POW %d", d->required_power);
   }
   RowSpec row = {
     .icon = -1,
@@ -53,7 +53,7 @@ static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   for (int i = 0; i < DUNGEON_COUNT; i++) {
     s_enemy[i] = gbitmap_create_with_resource(gfx_enemy_resource(i));
-    s_enemy_sub[i] = gbitmap_create_as_sub_bitmap(s_enemy[i], GRect(0, 0, 24, 24));
+    s_enemy_sub[i] = gbitmap_create_as_sub_bitmap(s_enemy[i], GRect(0, 0, ENEMY_SIZE, ENEMY_SIZE));
   }
   s_menu = menu_layer_create(layer_get_bounds(root));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){

@@ -13,23 +13,24 @@
 typedef enum { OPT_BUY, OPT_SELL, OPT_TALK, OPT_COUNT } ShopOption;
 static const char *const OPTION_LABELS[OPT_COUNT] = { "Buy", "Sell", "Talk" };
 
+// ドットフォントは1行に入る文字数が少ないので、セリフは短めにしてある
 static const char *const GREETINGS[] = {
-  "Welcome, darling~ Take your time.",
-  "Oh, it's you again~ I missed you.",
-  "Come in, handsome. Looking for something?",
+  "Welcome, darling~",
+  "Oh, it's you again~",
+  "Hi handsome~ Need something?",
 };
 static const char *const TALKS[] = {
   "You look strong today~",
-  "Come back safe, okay? I'll be waiting.",
-  "I saved the best stuff just for you~",
-  "Don't stare too long, cutie~",
-  "Bring me something shiny, hero?",
-  "Brave men are my type, you know~",
+  "Come back safe, okay?",
+  "I saved the best for you~",
+  "Don't stare too long~",
+  "Bring me something shiny?",
+  "Brave men are my type~",
 };
 static const char *const THANKS[] = {
   "Great choice, darling~",
-  "Thank you~ It suits you!",
-  "Mmm, a man who knows quality~",
+  "It suits you~",
+  "A man of taste~",
 };
 
 #define ARRAY_LEN(a) ((int)(sizeof(a) / sizeof((a)[0])))
@@ -62,6 +63,7 @@ static const char *pick(const char *const *lines, int n) {
 static void front_update_proc(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
   int w = b.size.w, h = b.size.h;
+  // 会話ウィンドウの高さ（tools/gb_scenes.py の SHOP_SCREENS と揃える）
 #if defined(PBL_ROUND)
   int dlg_h = h * 34 / 100;
 #else
@@ -76,33 +78,40 @@ static void front_update_proc(Layer *layer, GContext *ctx) {
   }
 
   // 会話ウィンドウ
-  int inset = PBL_IF_ROUND_ELSE(w / 8, 2);
-  GRect box = GRect(inset, h - dlg_h + 1, w - inset * 2, dlg_h - PBL_IF_ROUND_ELSE(4, 3));
+  int top = SNAP(h - dlg_h);
+#if defined(PBL_ROUND)
   graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_rect(ctx, GRect(0, h - dlg_h, w, dlg_h), 0, GCornerNone);
-  gfx_draw_panel(ctx, box, THEME_BG, GColorWhite);
-  gfx_draw_heart(ctx, box.origin.x + box.size.w - 10, box.origin.y + 3);
+  graphics_fill_rect(ctx, GRect(0, top, w, h - top), 0, GCornerNone);
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, GRect(0, top + PX, w, PX), 0, GCornerNone);
+  int inset = SNAP(w / 7);
+  GRect inner = GRect(inset, top + 3 * PX, w - inset * 2, h - top - 3 * PX);
+  GTextAlignment align = GTextAlignmentCenter;
+#else
+  GRect panel = GRect(0, top, w, h - top);
+  gfx_draw_window(ctx, panel);
+  GRect inner = gfx_window_inner(panel);
+  GTextAlignment align = GTextAlignmentLeft;
+  gfx_draw_heart(ctx, inner.origin.x + inner.size.w - 3 * PX, inner.origin.y);
+#endif
 
-  int line = IS_LARGE_SCREEN ? 20 : 16;
-  GRect speech = GRect(box.origin.x + 4, box.origin.y - 1, box.size.w - 16, line * 2 + 2);
-  gfx_draw_text(ctx, s_speech, gfx_font_small(), speech,
-                PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft), GColorWhite);
+  GRect speech = GRect(inner.origin.x, inner.origin.y, inner.size.w - PBL_IF_ROUND_ELSE(0, 5 * PX),
+                       LINE_H * 2);
+  gfx_text(ctx, s_speech, speech, align, THEME_FG);
 
-  // 選択肢（丸型は下へ行くほど狭いので中央に寄せる）
-  int opt_y = box.origin.y + box.size.h - line - PBL_IF_ROUND_ELSE(10, 4);
-  int opt_area = PBL_IF_ROUND_ELSE(w * 6 / 10, box.size.w - 8);
-  int opt_x = (w - opt_area) / 2;
+  // 選択肢（カーソルで選ぶ）
+  // 丸型は下へ行くほど狭いので、セリフのすぐ下に置く
+  int opt_y = PBL_IF_ROUND_ELSE(inner.origin.y + LINE_H * 2 + PX,
+                                inner.origin.y + inner.size.h - LINE_H);
+  int opt_area = PBL_IF_ROUND_ELSE(w * 7 / 10, inner.size.w);
+  int opt_x = PBL_IF_ROUND_ELSE((w - opt_area) / 2, inner.origin.x);
   int opt_w = opt_area / OPT_COUNT;
   for (int i = 0; i < OPT_COUNT; i++) {
-    GRect r = GRect(opt_x + i * opt_w, opt_y, opt_w - 2, line + 2);
+    int x = SNAP(opt_x + i * opt_w);
     bool sel = (i == (int)s_option);
-    if (sel) {
-      graphics_context_set_fill_color(ctx, THEME_HI_BG);
-      graphics_fill_rect(ctx, r, 3, GCornersAll);
-    }
-    gfx_draw_text(ctx, OPTION_LABELS[i], gfx_font_small_bold(),
-                  GRect(r.origin.x, r.origin.y - 3, r.size.w, r.size.h + 4),
-                  GTextAlignmentCenter, sel ? THEME_HI_FG : GColorWhite);
+    if (sel) gfx_draw_cursor(ctx, x, opt_y, THEME_HI);
+    gfx_text(ctx, OPTION_LABELS[i], GRect(x + 5 * PX, opt_y, opt_w, LINE_H), GTextAlignmentLeft,
+             sel ? THEME_HI : THEME_FG);
   }
 }
 
@@ -197,37 +206,36 @@ void shop_window_push(void) {
 // 購入・売却の一覧
 // ============================================================
 #if defined(PBL_ROUND)
-#define LIST_HEADER_H (PBL_DISPLAY_HEIGHT * 34 / 100)
+#define LIST_HEADER_H SNAP(PBL_DISPLAY_HEIGHT * 34 / 100)
 #else
 #define LIST_HEADER_H (IS_LARGE_SCREEN ? 58 : 46)
 #endif
-#define FACE_W (IS_LARGE_SCREEN ? 56 : 46)
 
 static void list_header_update_proc(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
-  graphics_context_set_fill_color(ctx, GColorImperialPurple);
+  graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, b, 0, GCornerNone);
+  GSize face = s_face ? gbitmap_get_bounds(s_face).size : GSize(0, 0);
 #if defined(PBL_ROUND)
-  // 丸型：顔を中央やや左に置き、セリフは右側に下寄せ
-  int face_x = b.size.w / 2 - FACE_W - 2;
-  int x = b.size.w / 2 + 2;
-  GRect r = GRect(x, b.size.h / 5, b.size.w * 3 / 10 + 4, b.size.h - b.size.h / 5 - 2);
+  // 丸型：顔を左寄りに置き、セリフは右側に下寄せ（上端は狭いので避ける）
+  int face_x = SNAP(b.size.w / 6);
+  int x = face_x + face.w + 2 * PX;
+  int ty = SNAP(b.size.h / 3);
+  GRect r = GRect(x, ty, b.size.w - x - face_x, b.size.h - ty - PX);
 #else
-  int face_x = 2;
-  int x = face_x + FACE_W + 3;
-  GRect r = GRect(x, 0, b.size.w - x - 4, b.size.h - 2);
+  int face_x = 2 * PX;
+  int x = face_x + face.w + 3 * PX;
+  GRect r = GRect(x, 2 * PX, b.size.w - x - 2 * PX, b.size.h - 3 * PX);
 #endif
+  int face_y = b.size.h - face.h - 2 * PX;
   if (s_face) {
     graphics_context_set_compositing_mode(ctx, GCompOpSet);
-    graphics_draw_bitmap_in_rect(ctx, s_face, GRect(face_x, b.size.h - (LIST_HEADER_H - 2),
-                                                    FACE_W, LIST_HEADER_H - 2));
+    graphics_draw_bitmap_in_rect(ctx, s_face, GRect(face_x, face_y, face.w, face.h));
   }
-  graphics_context_set_stroke_color(ctx, GColorChromeYellow);
-  graphics_draw_line(ctx, GPoint(0, b.size.h - 1), GPoint(b.size.w, b.size.h - 1));
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, GRect(0, b.size.h - PX, b.size.w, PX), 0, GCornerNone);
 
-  graphics_context_set_text_color(ctx, GColorWhite);
-  graphics_draw_text(ctx, s_speech, gfx_font_small(), r, GTextOverflowModeWordWrap,
-                     GTextAlignmentLeft, NULL);
+  gfx_text(ctx, s_speech, r, GTextAlignmentLeft, THEME_FG);
 }
 
 static int sell_rows(void) {
@@ -240,12 +248,12 @@ static uint16_t list_num_rows(MenuLayer *menu, uint16_t section, void *data) {
 }
 
 static int16_t list_header_height(MenuLayer *menu, uint16_t section, void *data) {
-  return 18;
+  return MENU_HEADER_H;
 }
 
 static void list_draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *data) {
   static char buf[32];
-  snprintf(buf, sizeof(buf), "%s  -  Gold %ld", s_mode == LIST_BUY ? "BUY" : "SELL", (long)game_gold());
+  snprintf(buf, sizeof(buf), "%s %ldG", s_mode == LIST_BUY ? "BUY" : "SELL", (long)game_gold());
   gfx_draw_header(ctx, cell, buf);
 }
 
@@ -263,13 +271,13 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
     row.icon = id;
     row.title = it->name;
     if (it->type == ITEM_MATERIAL) {
-      snprintf(sub, sizeof(sub), "%dG  Material", it->price);
+      snprintf(sub, sizeof(sub), "%dG ITEM", it->price);
     } else if (it->atk && it->def) {
-      snprintf(sub, sizeof(sub), "%dG  ATK+%d DEF+%d", it->price, it->atk, it->def);
+      snprintf(sub, sizeof(sub), "%dG A+%d D+%d", it->price, it->atk, it->def);
     } else if (it->atk) {
-      snprintf(sub, sizeof(sub), "%dG  ATK+%d", it->price, it->atk);
+      snprintf(sub, sizeof(sub), "%dG ATK+%d", it->price, it->atk);
     } else {
-      snprintf(sub, sizeof(sub), "%dG  DEF+%d", it->price, it->def);
+      snprintf(sub, sizeof(sub), "%dG DEF+%d", it->price, it->def);
     }
     row.sub = sub;
     row.warn_sub = game_gold() < it->price;
@@ -290,7 +298,7 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
       if (locked) {
         snprintf(sub, sizeof(sub), "Equipped");
       } else {
-        snprintf(sub, sizeof(sub), "Sell for %dG", game_sell_price(id));
+        snprintf(sub, sizeof(sub), "Sell %dG", game_sell_price(id));
       }
       row.sub = sub;
       row.dim = locked;
@@ -313,7 +321,7 @@ static void list_select(MenuLayer *menu, MenuIndex *index, void *data) {
     if (id < 0) return;
     switch (game_sell(id)) {
       case SELL_OK: s_speech = "Ooh, I'll take that~"; break;
-      case SELL_EQUIPPED: s_speech = "You're wearing that, silly~"; break;
+      case SELL_EQUIPPED: s_speech = "That's equipped, silly~"; break;
       case SELL_NONE: break;
     }
     int n = sell_rows();
@@ -329,7 +337,6 @@ static void list_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
   gfx_items_acquire();
-  // 顔の画像は見出しの枠に合わせた大きさで用意してある（tools/shop_art.py）
   s_face = gfx_keeper_acquire();
 
   s_list_header = layer_create(GRect(0, 0, b.size.w, LIST_HEADER_H));
@@ -348,7 +355,7 @@ static void list_window_load(Window *window) {
   gfx_setup_menu(s_list_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_list_menu));
 
-  s_speech = (s_mode == LIST_BUY) ? "See anything you like~?" : "What have you got for me?";
+  s_speech = (s_mode == LIST_BUY) ? "See anything you like~?" : "What have you got?";
 }
 
 static void list_window_unload(Window *window) {

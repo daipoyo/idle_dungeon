@@ -49,28 +49,28 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     case CMD_EXPLORE:
       row.icon = 1;
       row.title = "Explore";
-      snprintf(sub, sizeof(sub), "Go to %s", g_dungeons[game_current_dungeon()].name);
+      snprintf(sub, sizeof(sub), "%s", g_dungeons[game_current_dungeon()].name);
       row.sub = sub;
       break;
     case CMD_DUNGEONS:
       row.icon = 14;
       row.title = "Dungeons";
-      row.sub = "Choose a destination";
+      row.sub = "Pick a place";
       break;
     case CMD_SHOP:
       row.icon = 8;
       row.title = "Shop";
-      row.sub = "Buy & sell items";
+      row.sub = "Buy & sell";
       break;
     case CMD_STATUS:
       row.icon = 5;
       row.title = "Status";
-      row.sub = game_can_change_gear() ? "Stats & equipment" : "View stats";
+      row.sub = game_can_change_gear() ? "Stats & gear" : "View stats";
       break;
     case CMD_RETREAT:
       row.icon = 12;
       row.title = "Retreat";
-      row.sub = "Back to town, no loot";
+      row.sub = "Back, no loot";
       break;
   }
   gfx_draw_row(ctx, cell, &row);

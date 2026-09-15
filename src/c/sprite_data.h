@@ -15,178 +15,138 @@ static const uint8_t PAL_LUT[128] = {
   0xE2, 0xE6, 0xE0, 0xF9, 0xC5, 0xDB, 0xE5, 0xD7, 0xE7, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-#define HERO_IDLE_HAND_X 12
-#define HERO_IDLE_HAND_Y 15
-static const char *const HERO_IDLE[HERO_H] = {
-  ".....KKKKK......",
-  "...KKhhhhhKK....",
-  "..KhhhhhhhhhK...",
-  ".KhhhhhhhhhhhK..",
-  ".KhhhhhhhhhhhhK.",
-  "KhhhrrrrrrrrrK..",
-  "KhHhrreeeeeeeK..",
-  "KhHhheeeeeKeeK..",
-  "KhHhheeeeeKeeK..",
-  ".KhhheeeeeeeevK.",
-  "..KhhveeeeeveK..",
-  "...KhhvveeeeK...",
-  "..Kcc311113eK...",
-  ".Kccc3111112eK..",
-  ".Kccc1111112eK..",
-  ".Kcc21111112eK..",
-  ".KccKyyyyyyKK...",
-  ".KccK2221222K...",
-  "..KKKppKKppK....",
-  "....KppKKppK....",
-  "....KppKKppK....",
-  "....KBBKKBBK....",
-  "...KBBBKBBBBK...",
-  "....KKK.KKKK....",
+#define HERO_IDLE_HAND_X 8
+#define HERO_IDLE_HAND_Y 9
+static const char *const HERO_IDLE[HERO_MAP_H] = {
+  "...KKKKK....",
+  "..KhhhhhK...",
+  ".KhhhhhhhK..",
+  ".KhhhheeeK..",
+  ".KhhheKeKK..",
+  ".KhhheeeeK..",
+  "..KKeeeeK...",
+  "..K21111K...",
+  ".K2111111K..",
+  ".KeK1111eK..",
+  ".KK22222KK..",
+  "..K2KKK2K...",
+  "..K2K.K2K...",
+  "..K2K.K2K...",
+  ".KKKK.KKKK..",
+  "............",
 };
 
-#define HERO_WALK0_HAND_X 12
-#define HERO_WALK0_HAND_Y 15
-static const char *const HERO_WALK0[HERO_H] = {
-  ".....KKKKK......",
-  "...KKhhhhhKK....",
-  "..KhhhhhhhhhK...",
-  ".KhhhhhhhhhhhK..",
-  ".KhhhhhhhhhhhhK.",
-  "KhhhrrrrrrrrrK..",
-  "KhHhrreeeeeeeK..",
-  "KhHhheeeeeKeeK..",
-  "KhHhheeeeeKeeK..",
-  ".KhhheeeeeeeevK.",
-  "..KhhveeeeeveK..",
-  "...KhhvveeeeK...",
-  "..Kcc311113eK...",
-  ".Kccc3111112eK..",
-  ".Kccc1111112eK..",
-  ".Kcc21111112eK..",
-  ".KccKyyyyyyKK...",
-  ".KccK2221222K...",
-  "..KKKppKKppK....",
-  "...KppK..KppK...",
-  "..KppK....KppK..",
-  "..KBBK....KBBK..",
-  ".KBBBK....KBBBK.",
-  "..KKK......KKK..",
+#define HERO_WALK0_HAND_X 8
+#define HERO_WALK0_HAND_Y 9
+static const char *const HERO_WALK0[HERO_MAP_H] = {
+  "...KKKKK....",
+  "..KhhhhhK...",
+  ".KhhhhhhhK..",
+  ".KhhhheeeK..",
+  ".KhhheKeKK..",
+  ".KhhheeeeK..",
+  "..KKeeeeK...",
+  "..K21111K...",
+  ".K2111111K..",
+  ".KeK1111eK..",
+  ".KK22222KK..",
+  "..K2KKK2K...",
+  ".K2K...K2K..",
+  ".K2K...K2K..",
+  "KKKK...KKKK.",
+  "............",
 };
 
-#define HERO_WALK1_HAND_X 12
-#define HERO_WALK1_HAND_Y 15
-static const char *const HERO_WALK1[HERO_H] = {
-  ".....KKKKK......",
-  "...KKhhhhhKK....",
-  "..KhhhhhhhhhK...",
-  ".KhhhhhhhhhhhK..",
-  ".KhhhhhhhhhhhhK.",
-  "KhhhrrrrrrrrrK..",
-  "KhHhrreeeeeeeK..",
-  "KhHhheeeeeKeeK..",
-  "KhHhheeeeeKeeK..",
-  ".KhhheeeeeeeevK.",
-  "..KhhveeeeeveK..",
-  "...KhhvveeeeK...",
-  "..Kcc311113eK...",
-  ".Kccc3111112eK..",
-  ".Kccc1111112eK..",
-  ".Kcc21111112eK..",
-  ".KccKyyyyyyKK...",
-  ".KccK2221222K...",
-  "..KK.KppppKK....",
-  ".....KppKppK....",
-  "....KppKKppK....",
-  "....KBBKKBBKK...",
-  "...KBBBKKBBBBK..",
-  "....KKK..KKKK...",
+#define HERO_WALK1_HAND_X 8
+#define HERO_WALK1_HAND_Y 9
+static const char *const HERO_WALK1[HERO_MAP_H] = {
+  "...KKKKK....",
+  "..KhhhhhK...",
+  ".KhhhhhhhK..",
+  ".KhhhheeeK..",
+  ".KhhheKeKK..",
+  ".KhhheeeeK..",
+  "..KKeeeeK...",
+  "..K21111K...",
+  ".K2111111K..",
+  ".KeK1111eK..",
+  ".KK22222KK..",
+  "..K2KKK2K...",
+  "..K2KK2K....",
+  "...K2K2K....",
+  "...KKKKKK...",
+  "............",
 };
 
-#define HERO_ATTACK_HAND_X 13
-#define HERO_ATTACK_HAND_Y 12
-static const char *const HERO_ATTACK[HERO_H] = {
-  ".....KKKKK......",
-  "...KKhhhhhKK....",
-  "..KhhhhhhhhhK...",
-  ".KhhhhhhhhhhhK..",
-  ".KhhhhhhhhhhhhK.",
-  "KhhhrrrrrrrrrK..",
-  "KhHhrreeeeeeeK..",
-  "KhHhheeeeeKeeK..",
-  "KhHhheeeeeKeeK..",
-  ".KhhheeeeeeeevK.",
-  "..KhhveeeeeveK..",
-  "...KhhvveeeeKK..",
-  "..Kcc31111eeeeK.",
-  ".Kccc311111KKK..",
-  ".Kccc1111112K...",
-  ".Kcc21111112K...",
-  ".KccKyyyyyyK....",
-  ".KccK2221222K...",
-  "..KKKppKKppK....",
-  "...KppK..KppK...",
-  "..KppK....KppK..",
-  "..KBBK....KBBK..",
-  ".KBBBK....KBBBK.",
-  "..KKK......KKK..",
+#define HERO_ATTACK_HAND_X 8
+#define HERO_ATTACK_HAND_Y 8
+static const char *const HERO_ATTACK[HERO_MAP_H] = {
+  "...KKKKK....",
+  "..KhhhhhK...",
+  ".KhhhhhhhK..",
+  ".KhhhheeeK..",
+  ".KhhheKeKK..",
+  ".KhhheeeeK..",
+  "..KKeeeeK...",
+  "..K21111KK..",
+  ".K21111eeK..",
+  ".K21111KK...",
+  ".KK22222K...",
+  "..K2KKK2K...",
+  ".K2K...K2K..",
+  ".K2K...K2K..",
+  "KKKK...KKKK.",
+  "............",
 };
 
-#define WPN_SWORD_REST_W 10
-#define WPN_SWORD_REST_H 10
-#define WPN_SWORD_REST_AX 1
-#define WPN_SWORD_REST_AY 2
-static const char *const WPN_SWORD_REST[10] = {
-  "..K.......",
-  ".KyK......",
-  "Key5K.....",
-  ".Ky45K....",
-  "..KK45K...",
-  "....K45K..",
-  ".....K45K.",
-  "......K45K",
-  ".......K4K",
-  "........K.",
+#define WPN_SWORD_REST_W 8
+#define WPN_SWORD_REST_H 7
+#define WPN_SWORD_REST_AX 2
+#define WPN_SWORD_REST_AY 5
+static const char *const WPN_SWORD_REST[7] = {
+  "......K.",
+  ".....K5K",
+  "....K54K",
+  "..KK54K.",
+  ".K654K..",
+  "..e6K...",
+  "...K....",
 };
 
-#define WPN_SWORD_SWING_W 14
-#define WPN_SWORD_SWING_H 6
+#define WPN_SWORD_SWING_W 9
+#define WPN_SWORD_SWING_H 5
 #define WPN_SWORD_SWING_AX 1
 #define WPN_SWORD_SWING_AY 2
-static const char *const WPN_SWORD_SWING[6] = {
-  "...K..........",
-  ".KKyKKKKKKKKK.",
-  "Keeyy55555555K",
-  ".KKy444444444K",
-  "..KyKKKKKKKKK.",
-  "...K..........",
+static const char *const WPN_SWORD_SWING[5] = {
+  "..K......",
+  ".K6KKKK..",
+  ".e65555K.",
+  ".K6KKKK..",
+  "..K......",
 };
 
-#define WPN_AXE_REST_W 11
-#define WPN_AXE_REST_H 9
+#define WPN_AXE_REST_W 8
+#define WPN_AXE_REST_H 7
 #define WPN_AXE_REST_AX 1
-#define WPN_AXE_REST_AY 1
-static const char *const WPN_AXE_REST[9] = {
-  ".KK........",
-  "Ke6K.......",
-  ".K66K.KKK..",
-  "..K66K555K.",
-  "...K66455K.",
-  "....K6445K.",
-  "...K55445K.",
-  "....K5555K.",
-  ".....KKKK..",
+#define WPN_AXE_REST_AY 5
+static const char *const WPN_AXE_REST[7] = {
+  "....KK..",
+  "...K55K.",
+  "..K5445K",
+  "..K6554K",
+  ".K6KK5K.",
+  ".eK..K..",
+  "........",
 };
 
-#define WPN_AXE_SWING_W 15
-#define WPN_AXE_SWING_H 7
+#define WPN_AXE_SWING_W 10
+#define WPN_AXE_SWING_H 5
 #define WPN_AXE_SWING_AX 1
-#define WPN_AXE_SWING_AY 3
-static const char *const WPN_AXE_SWING[7] = {
-  "...........KKK.",
-  "..........K555K",
-  ".KKKKKKKKKK545K",
-  "Kee66666666445K",
-  ".KKKKKKKKKK545K",
-  "..........K555K",
-  "...........KKK.",
+#define WPN_AXE_SWING_AY 2
+static const char *const WPN_AXE_SWING[5] = {
+  "......KK..",
+  "..KKKK55K.",
+  ".e6666445K",
+  "..KKKK55K.",
+  "......KK..",
 };

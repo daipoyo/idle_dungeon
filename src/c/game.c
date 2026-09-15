@@ -191,11 +191,11 @@ static void finish_run(RunResult *r) {
   s_save.location = LOC_TOWN;
 
   if (!r->success) {
-    snprintf(s_log, sizeof(s_log), "Retreated from %s. +%dG", g_dungeons[r->dungeon].name, r->gold);
+    snprintf(s_log, sizeof(s_log), "Retreated... +%dG", r->gold);
   } else if (r->item_id >= 0) {
-    snprintf(s_log, sizeof(s_log), "Back! +%dG & %s", r->gold, g_items[r->item_id].name);
+    snprintf(s_log, sizeof(s_log), "Got %s! +%dG", g_items[r->item_id].name, r->gold);
   } else {
-    snprintf(s_log, sizeof(s_log), "Back from %s! +%dG", g_dungeons[r->dungeon].name, r->gold);
+    snprintf(s_log, sizeof(s_log), "Cleared! +%dG", r->gold);
   }
   game_save();
 }
@@ -213,14 +213,14 @@ bool game_depart(int idx) {
   if (idx < 0 || idx >= DUNGEON_COUNT) return false;
   if (s_save.location != LOC_TOWN) return false;
   if (!game_dungeon_unlocked(idx)) {
-    snprintf(s_log, sizeof(s_log), "Too dangerous! Need power %d", g_dungeons[idx].required_power);
+    snprintf(s_log, sizeof(s_log), "Too dangerous! Need POW %d", g_dungeons[idx].required_power);
     return false;
   }
   s_save.current_dungeon = (uint8_t)idx;
   s_save.location = LOC_DUNGEON;
   s_run_start_ms = now_ms();
   s_save.run_started = (uint32_t)(s_run_start_ms / 1000);
-  snprintf(s_log, sizeof(s_log), "Exploring %s...", g_dungeons[idx].name);
+  snprintf(s_log, sizeof(s_log), "Exploring...");
   game_save();
   return true;
 }
@@ -228,7 +228,7 @@ bool game_depart(int idx) {
 void game_retreat(void) {
   if (s_save.location != LOC_DUNGEON) return;
   s_save.location = LOC_TOWN;
-  snprintf(s_log, sizeof(s_log), "Returned to town empty-handed.");
+  snprintf(s_log, sizeof(s_log), "Back to town, no loot.");
   game_save();
 }
 
@@ -311,7 +311,7 @@ void game_init(void) {
     RunResult r;
     game_update(&r);   // 終わっていれば町に戻り、メッセージも設定される
     if (s_save.location == LOC_DUNGEON) {
-      snprintf(s_log, sizeof(s_log), "Exploring %s...", g_dungeons[s_save.current_dungeon].name);
+      snprintf(s_log, sizeof(s_log), "Exploring...");
     }
   }
 }

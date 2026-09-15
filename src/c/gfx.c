@@ -1,20 +1,123 @@
 #include "gfx.h"
 #include "game.h"
 #include "sprite_data.h"
+#include "font_data.h"
 
 // ============================================================
-// フォント
+// ドットフォント
 // ============================================================
-GFont gfx_font_small(void) {
-  return fonts_get_system_font(IS_LARGE_SCREEN ? FONT_KEY_GOTHIC_18 : FONT_KEY_GOTHIC_14);
+static const uint8_t *glyph(char c) {
+  unsigned char u = (unsigned char)c;
+  if (u >= 'a' && u <= 'z') u -= 'a' - 'A';
+  if (u < FONT_FIRST || u > FONT_LAST) u = '?';
+  return FONT_GLYPHS[u - FONT_FIRST];
 }
 
-GFont gfx_font_small_bold(void) {
-  return fonts_get_system_font(IS_LARGE_SCREEN ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14_BOLD);
+// 文字の送り幅（字間1ドットを含む）
+static int advance(char c) {
+  return (glyph(c)[0] + 1) * PX;
 }
 
-GFont gfx_font_title(void) {
-  return fonts_get_system_font(IS_LARGE_SCREEN ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD);
+static int span_width(const char *s, int n) {
+  int w = 0;
+  for (int i = 0; i < n; i++) w += advance(s[i]);
+  return n > 0 ? w - PX : 0;
+}
+
+// s から始まる1行の文字数を返し、*next に次の行の先頭を入れる
+static int next_line(const char *s, int max_w, const char **next) {
+  int w = 0;
+  int last_space = -1;
+  int i = 0;
+  for (; s[i] && s[i] != '\n'; i++) {
+    if (s[i] == ' ') last_space = i;
+    int nw = w + advance(s[i]);
+    if (i > 0 && nw - PX > max_w) {
+      if (last_space > 0) {
+        *next = s + last_space + 1;
+        return last_space;
+      }
+      *next = s + i;
+      return i;
+    }
+    w = nw;
+  }
+  *next = (s[i] == '\n') ? s + i + 1 : s + i;
+  return i;
+}
+
+static void draw_span(GContext *ctx, const char *s, int n, int x, int y) {
+  for (int i = 0; i < n; i++) {
+    const uint8_t *g = glyph(s[i]);
+    for (int r = 0; r < FONT_GLYPH_H; r++) {
+      uint8_t bits = g[1 + r];
+      int c = 0;
+      while (bits >> c) {
+        if (!((bits >> c) & 1)) { c++; continue; }
+        int run = 1;
+        while ((bits >> (c + run)) & 1) run++;
+        graphics_fill_rect(ctx, GRect(x + c * PX, y + r * PX, run * PX, PX), 0, GCornerNone);
+        c += run;
+      }
+    }
+    x += advance(s[i]);
+  }
+}
+
+int gfx_text_width(const char *text) {
+  int n = 0;
+  while (text[n] && text[n] != '\n') n++;
+  return span_width(text, n);
+}
+
+int gfx_text_lines(const char *text, int width) {
+  int lines = 0;
+  const char *p = text;
+  while (*p) {
+    const char *next;
+    next_line(p, width, &next);
+    p = next;
+    lines++;
+  }
+  return lines;
+}
+
+int gfx_text(GContext *ctx, const char *text, GRect box, GTextAlignment align, GColor color) {
+  int max_lines = box.size.h / LINE_H;
+  if (max_lines < 1) max_lines = 1;
+  graphics_context_set_fill_color(ctx, color);
+  int lines = 0;
+  const char *p = text;
+  while (*p && lines < max_lines) {
+    const char *next;
+    int n = next_line(p, box.size.w, &next);
+    // 最後の行に入りきらないときは、単語の途中でも入るところまで描く
+    if (lines == max_lines - 1 && *next && next[-1] != '\n') {
+      n = 0;
+      while (p[n] && p[n] != '\n' && span_width(p, n + 1) <= box.size.w) n++;
+    }
+    int w = span_width(p, n);
+    int x = box.origin.x;
+    if (align == GTextAlignmentCenter) x += SNAP((box.size.w - w) / 2);
+    else if (align == GTextAlignmentRight) x += box.size.w - w;
+    draw_span(ctx, p, n, x, box.origin.y + lines * LINE_H);
+    p = next;
+    lines++;
+  }
+  return lines;
+}
+
+void gfx_text_outlined(GContext *ctx, const char *text, GRect box, GTextAlignment align,
+                       GColor color, GColor outline) {
+  static const int8_t OFFS[8][2] = {
+    { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 },
+  };
+  for (int i = 0; i < 8; i++) {
+    GRect r = GRect(box.origin.x + OFFS[i][0] * PX, box.origin.y + OFFS[i][1] * PX,
+                    box.size.w, box.size.h);
+    gfx_text(ctx, text, r, align, outline);
+  }
+  gfx_text(ctx, text, box, align, color);
 }
 
 // ============================================================
@@ -44,20 +147,20 @@ void gfx_draw_charmap(GContext *ctx, const char *const *rows, int w, int h,
 // ============================================================
 // 勇者
 // ============================================================
-// 防具ごとの色（主・影・ハイライト）。0番は防具なしの青い服
-static const char ARMOR_COLORS[5][3] = {
-  { 'B', 'N', 'u' },
-  { 's', 'o', 'l' },  // Cloth Armor
-  { 'o', 'b', 's' },  // Leather Armor
-  { 'g', 'k', 'W' },  // Chain Mail
-  { 'I', 'i', 'W' },  // Plate Armor
+// 防具ごとの服の色（主・影）。0番は防具なしの緑の服
+static const char ARMOR_COLORS[5][2] = {
+  { 'G', 'd' },
+  { 'l', 'A' },  // Cloth Armor
+  { 'o', 'b' },  // Leather Armor
+  { 'g', 'k' },  // Chain Mail
+  { 'I', 'i' },  // Plate Armor
 };
 
 // 武器ごとの色（刀身・刀身ハイライト・柄）
 static const char WEAPON_COLORS[4][3] = {
-  { 'v', 'g', 'b' },  // Rusty Sword
+  { 'v', 'e', 'b' },  // Rusty Sword
   { 'g', 'W', 'o' },  // Iron Sword
-  { 'C', 'W', 'B' },  // Steel Blade
+  { 'u', 'C', 'B' },  // Steel Blade
   { 'g', 'W', 'o' },  // Battle Axe
 };
 
@@ -69,17 +172,12 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
   uint8_t lut[128];
   memcpy(lut, PAL_LUT, sizeof(lut));
   set_lut(lut, 'h', 'o');  // 髪
-  set_lut(lut, 'H', 'b');
-  set_lut(lut, 'c', 'r');  // マント
-  set_lut(lut, 'C', 'b');
-  set_lut(lut, 'p', 'N');  // ズボン
-  set_lut(lut, 'B', 'b');  // ブーツ
+  set_lut(lut, 'e', 's');  // 肌
 
   int armor = game_equipped(ITEM_ARMOR);
   int ai = (armor >= 4 && armor <= 7) ? armor - 3 : 0;
   set_lut(lut, '1', ARMOR_COLORS[ai][0]);
   set_lut(lut, '2', ARMOR_COLORS[ai][1]);
-  set_lut(lut, '3', ARMOR_COLORS[ai][2]);
 
   const char *const *body;
   int hand_x, hand_y;
@@ -89,7 +187,7 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
     case HERO_POSE_ATTACK: body = HERO_ATTACK; hand_x = HERO_ATTACK_HAND_X; hand_y = HERO_ATTACK_HAND_Y; break;
     default: body = HERO_IDLE; hand_x = HERO_IDLE_HAND_X; hand_y = HERO_IDLE_HAND_Y; break;
   }
-  gfx_draw_charmap(ctx, body, HERO_W, HERO_H, x, y, scale, flip, lut);
+  gfx_draw_charmap(ctx, body, HERO_MAP_W, HERO_MAP_H, x, y, scale, flip, lut);
 
   int weapon = game_equipped(ITEM_WEAPON);
   if (weapon < 0 || weapon > 3) return;
@@ -108,7 +206,7 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
     else { map = WPN_SWORD_REST; w = WPN_SWORD_REST_W; h = WPN_SWORD_REST_H; ax = WPN_SWORD_REST_AX; ay = WPN_SWORD_REST_AY; }
   }
   // 手の位置に武器の握りを合わせる（左右反転時は両方を反転して計算）
-  int hx = flip ? (HERO_W - 1 - hand_x) : hand_x;
+  int hx = flip ? (HERO_MAP_W - 1 - hand_x) : hand_x;
   int wax = flip ? (w - 1 - ax) : ax;
   gfx_draw_charmap(ctx, map, w, h, x + (hx - wax) * scale, y + (hand_y - ay) * scale, scale, flip, lut);
 }
@@ -123,7 +221,7 @@ static int s_items_refs;
 void gfx_items_acquire(void) {
   if (s_items_refs++ == 0) {
     s_items_sheet = gbitmap_create_with_resource(RESOURCE_ID_IMG_ITEMS);
-    s_item_sub = gbitmap_create_as_sub_bitmap(s_items_sheet, GRect(0, 0, 16, 16));
+    s_item_sub = gbitmap_create_as_sub_bitmap(s_items_sheet, GRect(0, 0, ICON_SIZE, ICON_SIZE));
   }
 }
 
@@ -139,9 +237,10 @@ void gfx_items_release(void) {
 
 void gfx_draw_item_icon(GContext *ctx, int item_id, int x, int y) {
   if (!s_item_sub || item_id < 0 || item_id >= ITEM_COUNT) return;
-  gbitmap_set_bounds(s_item_sub, GRect((item_id % 4) * 16, (item_id / 4) * 16, 16, 16));
+  gbitmap_set_bounds(s_item_sub, GRect((item_id % 4) * ICON_SIZE, (item_id / 4) * ICON_SIZE,
+                                       ICON_SIZE, ICON_SIZE));
   graphics_context_set_compositing_mode(ctx, GCompOpSet);
-  graphics_draw_bitmap_in_rect(ctx, s_item_sub, GRect(x, y, 16, 16));
+  graphics_draw_bitmap_in_rect(ctx, s_item_sub, GRect(x, y, ICON_SIZE, ICON_SIZE));
 }
 
 uint32_t gfx_enemy_resource(int dungeon) {
@@ -175,7 +274,7 @@ void gfx_keeper_release(void) {
 // ============================================================
 void gfx_setup_menu(MenuLayer *menu, Window *window) {
   menu_layer_set_normal_colors(menu, THEME_BG, THEME_FG);
-  menu_layer_set_highlight_colors(menu, THEME_HI_BG, THEME_HI_FG);
+  menu_layer_set_highlight_colors(menu, THEME_BG, THEME_HI);
   menu_layer_set_click_config_onto_window(menu, window);
   window_set_background_color(window, THEME_BG);
 }
@@ -183,110 +282,135 @@ void gfx_setup_menu(MenuLayer *menu, Window *window) {
 void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   GRect b = layer_get_bounds(cell);
   bool hi = menu_cell_layer_is_highlighted(cell);
-  graphics_context_set_fill_color(ctx, hi ? THEME_HI_BG : THEME_BG);
+  graphics_context_set_fill_color(ctx, THEME_BG);
   graphics_fill_rect(ctx, b, 0, GCornerNone);
 
-  int x = PBL_IF_ROUND_ELSE(b.size.w / 10, 4);
+  int x = SNAP(PBL_IF_ROUND_ELSE(b.size.w / 10, 2));
   int right_edge = b.size.w - PBL_IF_ROUND_ELSE(b.size.w / 10, 4);
+  int two_lines = row->sub ? LINE_H + TEXT_H : TEXT_H;
+  int ty = SNAP((b.size.h - two_lines) / 2);
+
+  // カーソル
+  if (hi) gfx_draw_cursor(ctx, x, ty, THEME_HI);
+  x += 4 * PX;
+
   if (row->icon >= 0) {
-    int iy = (b.size.h - 20) / 2;
-    graphics_context_set_fill_color(ctx, row->dim ? GColorDarkGray : GColorWhite);
-    graphics_fill_rect(ctx, GRect(x, iy, 20, 20), 3, GCornersAll);
-    gfx_draw_item_icon(ctx, row->icon, x + 2, iy + 2);
-    x += 25;
+    gfx_draw_item_icon(ctx, row->icon, x, SNAP((b.size.h - ICON_SIZE) / 2));
+    x += ICON_SIZE + 2 * PX;
   } else if (row->bitmap) {
-    int iy = (b.size.h - 28) / 2;
-    graphics_context_set_fill_color(ctx, row->dim ? GColorDarkGray : GColorWhite);
-    graphics_fill_rect(ctx, GRect(x, iy, 28, 28), 3, GCornersAll);
     graphics_context_set_compositing_mode(ctx, GCompOpSet);
-    graphics_draw_bitmap_in_rect(ctx, row->bitmap, GRect(x + 2, iy + 2, 24, 24));
-    x += 33;
+    graphics_draw_bitmap_in_rect(ctx, row->bitmap,
+                                 GRect(x, SNAP((b.size.h - ENEMY_SIZE) / 2), ENEMY_SIZE, ENEMY_SIZE));
+    x += ENEMY_SIZE + 2 * PX;
   }
 
-  GColor fg = hi ? THEME_HI_FG : (row->dim ? GColorLightGray : THEME_FG);
-  GColor sub = hi ? GColorBlack : (row->dim ? GColorDarkGray : THEME_SUB);
-  if (row->warn_sub) sub = hi ? GColorDarkCandyAppleRed : GColorMelon;
+  GColor fg = row->dim ? THEME_DIM : (hi ? THEME_HI : THEME_FG);
+  GColor sub = row->dim ? THEME_DIM : THEME_SUB;
+  if (row->warn_sub) sub = THEME_WARN;
 
-  GFont tf = gfx_font_small_bold();
-  GFont sf = gfx_font_small();
-  int line = IS_LARGE_SCREEN ? 21 : 17;
-  int ty = (b.size.h - line * 2) / 2 - 3;
   int right_w = 0;
   if (row->right) {
-    GSize sz = graphics_text_layout_get_content_size(row->right, tf, GRect(0, 0, 60, 30),
-                                                      GTextOverflowModeFill, GTextAlignmentRight);
-    right_w = sz.w + 4;
-    graphics_context_set_text_color(ctx, fg);
-    graphics_draw_text(ctx, row->right, tf, GRect(right_edge - right_w, ty, right_w, line + 4),
-                       GTextOverflowModeFill, GTextAlignmentRight, NULL);
+    right_w = gfx_text_width(row->right) + 2 * PX;
+    gfx_text(ctx, row->right, GRect(right_edge - right_w, ty, right_w, LINE_H),
+             GTextAlignmentRight, fg);
   }
-  graphics_context_set_text_color(ctx, fg);
-  graphics_draw_text(ctx, row->title, tf, GRect(x, ty, right_edge - x - right_w, line + 4),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  gfx_text(ctx, row->title, GRect(x, ty, right_edge - x - right_w, LINE_H), GTextAlignmentLeft, fg);
   if (row->sub) {
-    graphics_context_set_text_color(ctx, sub);
-    graphics_draw_text(ctx, row->sub, sf, GRect(x, ty + line, right_edge - x, line + 4),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    gfx_text(ctx, row->sub, GRect(x, ty + LINE_H, right_edge - x, LINE_H), GTextAlignmentLeft, sub);
   }
 }
 
 void gfx_draw_header(GContext *ctx, const Layer *cell, const char *text) {
   GRect b = layer_get_bounds(cell);
-  graphics_context_set_fill_color(ctx, THEME_HEADER_BG);
+  graphics_context_set_fill_color(ctx, THEME_BG);
   graphics_fill_rect(ctx, b, 0, GCornerNone);
-  graphics_context_set_text_color(ctx, GColorChromeYellow);
-  graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                     GRect(0, -2, b.size.w, b.size.h + 2), GTextOverflowModeFill,
-                     GTextAlignmentCenter, NULL);
+  int w = gfx_text_width(text);
+  int tx = SNAP((b.size.w - w) / 2);
+  int ty = SNAP((b.size.h - TEXT_H) / 2);
+  // 文字の左右に線を引く
+  int inset = PBL_IF_ROUND_ELSE(b.size.w / 6, 4);
+  int ly = ty + 2 * PX;
+  graphics_context_set_fill_color(ctx, THEME_DIM);
+  if (tx - 3 * PX > inset) {
+    graphics_fill_rect(ctx, GRect(inset, ly, tx - 2 * PX - inset, PX), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(tx + w + 2 * PX, ly, b.size.w - inset - (tx + w + 2 * PX), PX), 0, GCornerNone);
+  }
+  gfx_text(ctx, text, GRect(tx, ty, w + PX, LINE_H), GTextAlignmentLeft, THEME_GOLD);
 }
 
 // ============================================================
 // 小物
 // ============================================================
-void gfx_draw_coin(GContext *ctx, int cx, int cy) {
-  graphics_context_set_fill_color(ctx, GColorWindsorTan);
-  graphics_fill_circle(ctx, GPoint(cx, cy), 4);
-  graphics_context_set_fill_color(ctx, GColorChromeYellow);
-  graphics_fill_circle(ctx, GPoint(cx, cy), 3);
-  graphics_context_set_fill_color(ctx, GColorIcterine);
-  graphics_fill_rect(ctx, GRect(cx - 1, cy - 2, 2, 2), 0, GCornerNone);
-}
-
-static const char *const HEART[] = {
-  ".RR.RR.",
-  "RSRRRRR",
-  "RRRRRRR",
-  ".RRRRR.",
-  "..RRR..",
-  "...R...",
+static const char *const COIN[] = {
+  ".yyy.",
+  "yYYyo",
+  "yYyyo",
+  "yyyyo",
+  ".ooo.",
 };
 
+void gfx_draw_coin(GContext *ctx, int x, int y) {
+  gfx_draw_charmap(ctx, COIN, 5, 5, x, y, PX, false, NULL);
+}
+
 void gfx_draw_heart(GContext *ctx, int x, int y) {
-  gfx_draw_charmap(ctx, HEART, 7, 6, x, y, 1, false, NULL);
+  gfx_text(ctx, "{", GRect(x, y, 4 * PX, LINE_H), GTextAlignmentLeft, GColorFolly);
 }
 
-void gfx_draw_panel(GContext *ctx, GRect r, GColor fill, GColor border) {
-  graphics_context_set_fill_color(ctx, fill);
-  graphics_fill_rect(ctx, r, 4, GCornersAll);
-  graphics_context_set_stroke_color(ctx, border);
-  graphics_draw_round_rect(ctx, r, 4);
+void gfx_draw_cursor(GContext *ctx, int x, int y, GColor color) {
+  gfx_text(ctx, "}", GRect(x, y, 4 * PX, LINE_H), GTextAlignmentLeft, color);
 }
 
-void gfx_draw_text(GContext *ctx, const char *text, GFont font, GRect r,
-                   GTextAlignment align, GColor color) {
-  graphics_context_set_text_color(ctx, color);
-  graphics_draw_text(ctx, text, font, r, GTextOverflowModeWordWrap, align, NULL);
+static const char *const SPARK[] = {
+  "W...W",
+  ".Y.Y.",
+  "..W..",
+  ".Y.Y.",
+  "W...W",
+};
+
+void gfx_draw_spark(GContext *ctx, int cx, int cy) {
+  gfx_draw_charmap(ctx, SPARK, 5, 5, SNAP(cx - 5 * PX / 2), SNAP(cy - 5 * PX / 2), PX, false, NULL);
 }
 
-void gfx_draw_shadow_text(GContext *ctx, const char *text, GFont font, GRect r,
-                          GTextAlignment align, GColor color) {
-  graphics_context_set_text_color(ctx, GColorBlack);
-  for (int i = 0; i < 4; i++) {
-    int dx = (i == 0) ? -1 : (i == 1) ? 1 : 0;
-    int dy = (i == 2) ? -1 : (i == 3) ? 1 : 0;
-    graphics_draw_text(ctx, text, font, GRect(r.origin.x + dx, r.origin.y + dy, r.size.w, r.size.h),
-                       GTextOverflowModeWordWrap, align, NULL);
-  }
-  graphics_context_set_text_color(ctx, color);
-  graphics_draw_text(ctx, text, font, r, GTextOverflowModeWordWrap, align, NULL);
+static const char *const POOF[2][7] = {
+  {
+    ".......",
+    "..W.W..",
+    ".WWWWW.",
+    "..WgW..",
+    ".WWWWW.",
+    "..W.W..",
+    ".......",
+  },
+  {
+    "g..g..g",
+    ".g...g.",
+    "...g...",
+    "gg...gg",
+    "...g...",
+    ".g...g.",
+    "g..g..g",
+  },
+};
+
+void gfx_draw_poof(GContext *ctx, int cx, int cy, int frame) {
+  gfx_draw_charmap(ctx, POOF[frame ? 1 : 0], 7, 7, SNAP(cx - 7 * PX / 2), SNAP(cy - 7 * PX / 2),
+                   PX, false, NULL);
+}
+
+void gfx_draw_window(GContext *ctx, GRect r) {
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, r, 0, GCornerNone);
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  int x0 = r.origin.x + PX, y0 = r.origin.y + PX;
+  int w = r.size.w - 2 * PX, h = r.size.h - 2 * PX;
+  graphics_fill_rect(ctx, GRect(x0 + PX, y0, w - 2 * PX, PX), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(x0 + PX, y0 + h - PX, w - 2 * PX, PX), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(x0, y0 + PX, PX, h - 2 * PX), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(x0 + w - PX, y0 + PX, PX, h - 2 * PX), 0, GCornerNone);
+}
+
+GRect gfx_window_inner(GRect r) {
+  return GRect(r.origin.x + 3 * PX, r.origin.y + 3 * PX, r.size.w - 6 * PX, r.size.h - 6 * PX);
 }

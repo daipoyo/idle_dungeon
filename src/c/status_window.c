@@ -8,20 +8,19 @@
 //   セクション1: 装備中（武器・防具・装飾品）… 選択で外す
 //   セクション2: 持ち物 … 選択で装備／解除
 // ============================================================
-#define CARD_H (IS_LARGE_SCREEN ? 100 : 78)
-#define HEADER_H 18
+#define CARD_H (IS_LARGE_SCREEN ? 88 : 80)
 
 static Window *s_window;
 static MenuLayer *s_menu;
 
-static const char *const SLOT_NAMES[3] = { "Weapon", "Armor", "Accessory" };
+static const char *const SLOT_NAMES[3] = { "Weapon", "Armor", "Acc." };
 
 static void format_stats(char *buf, size_t size, int id) {
   const ItemDef *it = &g_items[id];
   if (it->type == ITEM_MATERIAL) {
-    snprintf(buf, size, "Material (sell %dG)", game_sell_price(id));
+    snprintf(buf, size, "Sell %dG", game_sell_price(id));
   } else if (it->atk && it->def) {
-    snprintf(buf, size, "ATK+%d DEF+%d", it->atk, it->def);
+    snprintf(buf, size, "A+%d D+%d", it->atk, it->def);
   } else if (it->atk) {
     snprintf(buf, size, "ATK+%d", it->atk);
   } else {
@@ -34,39 +33,40 @@ static void draw_card(GContext *ctx, const Layer *cell) {
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, b, 0, GCornerNone);
 
-  int inset = PBL_IF_ROUND_ELSE(b.size.w / 8, 4);
-  int scale = 2;
-  int slot_w = 52, slot_h = CARD_H - 10;
-  GRect slot = GRect(inset, 5, slot_w, slot_h);
-  graphics_context_set_fill_color(ctx, GColorDukeBlue);
-  graphics_fill_rect(ctx, slot, 4, GCornersAll);
-  graphics_context_set_fill_color(ctx, GColorArmyGreen);
-  graphics_fill_rect(ctx, GRect(slot.origin.x, slot.origin.y + slot_h - 8, slot_w, 8), 4, GCornersBottom);
-  graphics_context_set_stroke_color(ctx, GColorChromeYellow);
-  graphics_draw_round_rect(ctx, slot, 4);
-  int hero_y = slot.origin.y + slot_h - 6 - HERO_H * scale;
-  gfx_draw_hero(ctx, slot.origin.x + 2, hero_y, HERO_POSE_IDLE, scale, false);
+  // 勇者の立ち絵（枠の中に大きめに描く）
+  int inset = SNAP(PBL_IF_ROUND_ELSE(b.size.w / 8, 2));
+  int scale = 3;
+  int slot_w = 20 * scale, slot_h = CARD_H - 4 * PX;
+  GRect slot = GRect(inset, 2 * PX, slot_w, slot_h);
+  gfx_draw_window(ctx, slot);
+  graphics_context_set_fill_color(ctx, GColorDarkGreen);
+  graphics_fill_rect(ctx, GRect(slot.origin.x + 2 * PX, slot.origin.y + slot_h - 7 * PX,
+                                slot_w - 4 * PX, 5 * PX), 0, GCornerNone);
+  int hero_y = slot.origin.y + slot_h - 5 * PX - (HERO_MAP_H - 1) * scale;
+  gfx_draw_hero(ctx, slot.origin.x + 3 * scale, hero_y, HERO_POSE_IDLE, scale, false);
 
-  int x = slot.origin.x + slot_w + 6;
+  int x = slot.origin.x + slot_w + 3 * PX;
   int w = b.size.w - x - inset;
-  int line = IS_LARGE_SCREEN ? 21 : 16;
-  int y = 1;
+  int y = slot.origin.y + 2 * PX;
   static char buf[32];
   snprintf(buf, sizeof(buf), "POWER %d", game_power());
-  gfx_draw_text(ctx, buf, gfx_font_title(), GRect(x, y, w, line + 8), GTextAlignmentLeft, GColorChromeYellow);
-  y += line + 4;
-  snprintf(buf, sizeof(buf), "ATK %d  DEF %d", BASE_POWER + game_atk(), game_def());
-  gfx_draw_text(ctx, buf, gfx_font_small_bold(), GRect(x, y, w, line + 4), GTextAlignmentLeft, GColorWhite);
-  y += line;
+  gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_GOLD);
+  y += LINE_H + PX;
+  snprintf(buf, sizeof(buf), "ATK %d", BASE_POWER + game_atk());
+  gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_FG);
+  y += LINE_H;
+  snprintf(buf, sizeof(buf), "DEF %d", game_def());
+  gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_FG);
+  y += LINE_H;
   snprintf(buf, sizeof(buf), "%ld", (long)game_gold());
-  gfx_draw_coin(ctx, x + 4, y + line / 2 + 2);
-  gfx_draw_text(ctx, buf, gfx_font_small_bold(), GRect(x + 11, y, w - 11, line + 4), GTextAlignmentLeft, GColorIcterine);
-  y += line;
+  gfx_draw_coin(ctx, x, y);
+  gfx_text(ctx, buf, GRect(x + 6 * PX, y, w - 6 * PX, LINE_H), GTextAlignmentLeft, THEME_GOLD);
+  y += LINE_H;
   if (game_can_change_gear()) {
-    snprintf(buf, sizeof(buf), "Wins %d / %d", game_wins(), game_runs());
-    gfx_draw_text(ctx, buf, gfx_font_small(), GRect(x, y, w, line + 4), GTextAlignmentLeft, GColorLightGray);
+    snprintf(buf, sizeof(buf), "WIN %d/%d", game_wins(), game_runs());
+    gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_SUB);
   } else {
-    gfx_draw_text(ctx, "Exploring...", gfx_font_small(), GRect(x, y, w, line + 4), GTextAlignmentLeft, GColorMelon);
+    gfx_text(ctx, "EXPLORING", GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_WARN);
   }
 }
 
@@ -85,12 +85,12 @@ static uint16_t get_num_rows(MenuLayer *menu, uint16_t section, void *data) {
 }
 
 static int16_t get_header_height(MenuLayer *menu, uint16_t section, void *data) {
-  return section == 0 ? 0 : HEADER_H;
+  return section == 0 ? 0 : MENU_HEADER_H;
 }
 
 static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *data) {
   if (section == 1) {
-    gfx_draw_header(ctx, cell, game_can_change_gear() ? "EQUIPMENT" : "EQUIPMENT (locked)");
+    gfx_draw_header(ctx, cell, game_can_change_gear() ? "EQUIPMENT" : "EQUIP (LOCKED)");
   } else if (section == 2) {
     gfx_draw_header(ctx, cell, "BAG");
   }
@@ -115,7 +115,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
       row.title = g_items[id].name;
       char stats[24];
       format_stats(stats, sizeof(stats), id);
-      snprintf(sub, sizeof(sub), "%s  %s", SLOT_NAMES[index->row], stats);
+      snprintf(sub, sizeof(sub), "%s %s", SLOT_NAMES[index->row], stats);
     } else {
       row.title = "(none)";
       snprintf(sub, sizeof(sub), "%s", SLOT_NAMES[index->row]);
@@ -126,7 +126,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     int id = game_owned_nth(index->row);
     if (id < 0) {
       row.title = "Empty";
-      row.sub = "Explore to find loot!";
+      row.sub = "Go find loot!";
       row.dim = true;
     } else {
       row.icon = id;

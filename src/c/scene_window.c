@@ -31,7 +31,7 @@ static const uint8_t BG_FILL[DUNGEON_COUNT] = {
   BG_DUNGEON3_FILL, BG_DUNGEON4_FILL, BG_DUNGEON5_FILL,
 };
 // 空中に浮かぶ敵（クラゲ・目玉）は少し高い位置に描く
-static const int8_t ENEMY_LIFT[DUNGEON_COUNT] = { 0, 0, 0, 0, 8, 8 };
+static const int8_t ENEMY_LIFT[DUNGEON_COUNT] = { 0, 0, 0, 0, 4 * PX, 4 * PX };
 
 static Window *s_window;
 static Layer *s_canvas;
@@ -64,11 +64,11 @@ static Layout make_layout(GRect b) {
   L.w = b.size.w;
   L.h = b.size.h;
 #if defined(PBL_ROUND)
-  L.top_h = L.h * 16 / 100;
-  L.bot_h = L.h * 28 / 100;
+  L.top_h = SNAP(L.h * 16 / 100);
+  L.bot_h = SNAP(L.h * 30 / 100);
 #else
-  L.top_h = IS_LARGE_SCREEN ? 26 : 20;
-  L.bot_h = IS_LARGE_SCREEN ? 54 : 40;
+  L.top_h = IS_LARGE_SCREEN ? 24 : 20;
+  L.bot_h = IS_LARGE_SCREEN ? 56 : 40;
 #endif
   L.scene_top = L.top_h;
   L.scene_bot = L.h - L.bot_h;
@@ -116,9 +116,9 @@ static void ensure_art(int kind) {
   s_far = gbitmap_create_as_sub_bitmap(s_bg, GRect(0, 0, BG_TILE_W, BG_FAR_H));
   s_ground = gbitmap_create_as_sub_bitmap(s_bg, GRect(0, BG_FAR_H, BG_TILE_W, BG_GROUND_H));
   s_enemy = gbitmap_create_with_resource(gfx_enemy_resource(kind));
-  s_enemy_sub = gbitmap_create_as_sub_bitmap(s_enemy, GRect(0, 0, 24, 24));
+  s_enemy_sub = gbitmap_create_as_sub_bitmap(s_enemy, GRect(0, 0, ENEMY_SIZE, ENEMY_SIZE));
   s_chest = gbitmap_create_with_resource(RESOURCE_ID_IMG_CHEST);
-  s_chest_sub = gbitmap_create_as_sub_bitmap(s_chest, GRect(0, 0, 16, 16));
+  s_chest_sub = gbitmap_create_as_sub_bitmap(s_chest, GRect(0, 0, ICON_SIZE, ICON_SIZE));
 }
 
 static void hold_items(bool hold) {
@@ -157,40 +157,22 @@ static int walked_ms(int p, int clear_ms) {
 // ============================================================
 static void draw_enemy(GContext *ctx, int frame, int x, int y) {
   if (!s_enemy_sub) return;
-  gbitmap_set_bounds(s_enemy_sub, GRect(frame ? 24 : 0, 0, 24, 24));
+  gbitmap_set_bounds(s_enemy_sub, GRect(frame ? ENEMY_SIZE : 0, 0, ENEMY_SIZE, ENEMY_SIZE));
   graphics_context_set_compositing_mode(ctx, GCompOpSet);
-  graphics_draw_bitmap_in_rect(ctx, s_enemy_sub, GRect(x, y, 24, 24));
+  graphics_draw_bitmap_in_rect(ctx, s_enemy_sub, GRect(SNAP(x), SNAP(y), ENEMY_SIZE, ENEMY_SIZE));
 }
 
 static void draw_chest(GContext *ctx, bool open, int x, int y) {
   if (!s_chest_sub) return;
-  gbitmap_set_bounds(s_chest_sub, GRect(open ? 16 : 0, 0, 16, 16));
+  gbitmap_set_bounds(s_chest_sub, GRect(open ? ICON_SIZE : 0, 0, ICON_SIZE, ICON_SIZE));
   graphics_context_set_compositing_mode(ctx, GCompOpSet);
-  graphics_draw_bitmap_in_rect(ctx, s_chest_sub, GRect(x, y, 16, 16));
-}
-
-// 攻撃が当たったときの火花
-static void draw_spark(GContext *ctx, int cx, int cy, int size) {
-  graphics_context_set_stroke_color(ctx, GColorWhite);
-  graphics_draw_line(ctx, GPoint(cx - size, cy), GPoint(cx + size, cy));
-  graphics_draw_line(ctx, GPoint(cx, cy - size), GPoint(cx, cy + size));
-  graphics_context_set_stroke_color(ctx, GColorIcterine);
-  graphics_draw_line(ctx, GPoint(cx - size + 2, cy - size + 2), GPoint(cx + size - 2, cy + size - 2));
-  graphics_draw_line(ctx, GPoint(cx - size + 2, cy + size - 2), GPoint(cx + size - 2, cy - size + 2));
-}
-
-// 敵を倒したときの煙
-static void draw_poof(GContext *ctx, int cx, int cy, int t) {
-  int r = 3 + t / 60;
-  graphics_context_set_fill_color(ctx, (t < 250) ? GColorWhite : GColorLightGray);
-  graphics_fill_circle(ctx, GPoint(cx - r / 2, cy), r / 2 + 1);
-  graphics_fill_circle(ctx, GPoint(cx + r / 2, cy - 1), r / 2 + 1);
-  graphics_fill_circle(ctx, GPoint(cx, cy - r / 2), r / 2 + 2);
+  graphics_draw_bitmap_in_rect(ctx, s_chest_sub, GRect(SNAP(x), SNAP(y), ICON_SIZE, ICON_SIZE));
 }
 
 static void draw_banner(GContext *ctx, const Layout *L, const char *text, GColor color) {
-  gfx_draw_shadow_text(ctx, text, gfx_font_title(),
-                       GRect(0, L->scene_top + 4, L->w, 30), GTextAlignmentCenter, color);
+  int inset = PBL_IF_ROUND_ELSE(L->w / 8, 4);
+  gfx_text_outlined(ctx, text, GRect(inset, L->scene_top + 4 * PX, L->w - inset * 2, LINE_H * 2),
+                    GTextAlignmentCenter, color, GColorBlack);
 }
 
 static void draw_dungeon_scene(GContext *ctx, const Layout *L, int dungeon, int p) {
@@ -202,52 +184,54 @@ static void draw_dungeon_scene(GContext *ctx, const Layout *L, int dungeon, int 
   graphics_fill_rect(ctx, GRect(0, L->scene_top, L->w, L->scene_bot - L->scene_top), 0, GCornerNone);
   int scroll = s_result_active ? walked_ms(clear_ms, clear_ms) : walked_ms(p, clear_ms);
   scroll = scroll * WALK_SPEED / 1000;
-  int far_off = (scroll / 2) % BG_TILE_W;
-  int ground_off = scroll % BG_TILE_W;
+  // ドット単位でスクロールさせる（半ドットずれると絵がにじんで見える）
+  int far_off = SNAP(scroll / 2) % BG_TILE_W;
+  int ground_off = SNAP(scroll) % BG_TILE_W;
   int far_top = L->ground_top - BG_FAR_H;
   graphics_context_set_compositing_mode(ctx, GCompOpAssign);
   graphics_draw_bitmap_in_rect(ctx, s_far, GRect(-far_off, far_top, L->w + far_off, BG_FAR_H));
   graphics_draw_bitmap_in_rect(ctx, s_ground, GRect(-ground_off, L->ground_top, L->w + ground_off, BG_GROUND_H));
 
-  int hero_x = L->w * 3 / 10 - HERO_W / 2;
-  int foot_y = L->ground_top + 4;
+  int hero_x = SNAP(L->w * 3 / 10 - HERO_W / 2);
+  int foot_y = L->ground_top + 2 * PX;
   int hero_y = foot_y - HERO_H;
-  int enemy_y = foot_y - 24 - ENEMY_LIFT[dungeon];
-  int contact_x = hero_x + 20;
+  int enemy_y = foot_y - ENEMY_SIZE - ENEMY_LIFT[dungeon];
+  int contact_x = hero_x + HERO_W + 3 * PX;
 
   // ---- 帰還演出 ----
   if (s_result_active) {
     int t = s_result_ms;
     static char buf[24];
     if (s_result.success) {
-      int chest_x = hero_x + 30;
-      int chest_y = foot_y - 14;
+      int chest_x = hero_x + HERO_W + 4 * PX;
+      int chest_y = foot_y - ICON_SIZE + PX;
       bool open = t >= 600;
       draw_chest(ctx, open, chest_x, chest_y);
-      gfx_draw_hero(ctx, hero_x, hero_y, HERO_POSE_IDLE, 1, false);
+      gfx_draw_hero(ctx, hero_x, hero_y, HERO_POSE_IDLE, PX, false);
       if (open) {
-        int rise = (t - 600) / 30;
-        if (rise > 16) rise = 16;
+        int rise = SNAP((t - 600) / 30);
+        if (rise > 8 * PX) rise = 8 * PX;
         if (s_result.item_id >= 0) {
-          gfx_draw_item_icon(ctx, s_result.item_id, chest_x, chest_y - 6 - rise);
+          gfx_draw_item_icon(ctx, s_result.item_id, chest_x, chest_y - 3 * PX - rise);
         }
         snprintf(buf, sizeof(buf), "+%dG", s_result.gold);
-        gfx_draw_shadow_text(ctx, buf, gfx_font_small_bold(),
-                             GRect(chest_x - 20, chest_y - 30 - rise, 56, 20),
-                             GTextAlignmentCenter, GColorIcterine);
+        int tw = gfx_text_width(buf);
+        gfx_text_outlined(ctx, buf, GRect(SNAP(chest_x + ICON_SIZE / 2 - tw / 2), chest_y - 10 * PX - rise,
+                                          tw + PX, LINE_H),
+                          GTextAlignmentLeft, THEME_GOLD, GColorBlack);
       }
-      draw_banner(ctx, L, "CLEAR!", GColorIcterine);
+      draw_banner(ctx, L, "CLEAR!", THEME_GOLD);
     } else {
       if (t < 800) {
-        if ((t / 100) % 2 == 0) gfx_draw_hero(ctx, hero_x, hero_y, HERO_POSE_IDLE, 1, false);
+        if ((t / 100) % 2 == 0) gfx_draw_hero(ctx, hero_x, hero_y, HERO_POSE_IDLE, PX, false);
         draw_enemy(ctx, (t / 300) % 2, contact_x, enemy_y);
       } else {
-        int run_x = hero_x - (t - 800) * 60 / 1000;
+        int run_x = SNAP(hero_x - (t - 800) * 60 / 1000);
         HeroPose pose = ((t / 150) % 2) ? HERO_POSE_WALK0 : HERO_POSE_WALK1;
-        gfx_draw_hero(ctx, run_x, hero_y, pose, 1, true);
+        gfx_draw_hero(ctx, run_x, hero_y, pose, PX, true);
         draw_enemy(ctx, (t / 300) % 2, contact_x, enemy_y);
       }
-      draw_banner(ctx, L, "RETREAT...", GColorMelon);
+      draw_banner(ctx, L, "RETREAT...", THEME_WARN);
     }
     return;
   }
@@ -266,17 +250,17 @@ static void draw_dungeon_scene(GContext *ctx, const Layout *L, int dungeon, int 
     int ft = t - FIGHT_START;
     bool swing = (ft / 250) % 2 == 0;
     pose = swing ? HERO_POSE_ATTACK : HERO_POSE_IDLE;
-    int knock = swing ? 3 : 0;
+    int knock = swing ? 2 * PX : 0;
     // 最後の一撃の前後は点滅
     if (ft < FIGHT_END - FIGHT_START - 300 || (ft / 60) % 2 == 0) {
       draw_enemy(ctx, (t / 300) % 2, contact_x + knock, enemy_y);
     }
-    if (swing) draw_spark(ctx, contact_x + 4, foot_y - 12, 4);
+    if (swing) gfx_draw_spark(ctx, contact_x + 2 * PX, foot_y - ENEMY_SIZE / 2);
   } else if (enemy_cycle && t >= FIGHT_END && t < POOF_END) {
     pose = HERO_POSE_IDLE;
-    draw_poof(ctx, contact_x + 12, foot_y - 10, t - FIGHT_END);
+    gfx_draw_poof(ctx, contact_x + ENEMY_SIZE / 2, foot_y - ENEMY_SIZE / 2, (t - FIGHT_END) >= 250);
   }
-  gfx_draw_hero(ctx, hero_x, hero_y, pose, 1, false);
+  gfx_draw_hero(ctx, hero_x, hero_y, pose, PX, false);
 
   if (p < 1800) {
     draw_banner(ctx, L, g_dungeons[dungeon].name, GColorWhite);
@@ -288,84 +272,79 @@ static void draw_town_scene(GContext *ctx, const Layout *L) {
   graphics_context_set_fill_color(ctx, gfx_argb(BG_TOWN_FILL));
   graphics_fill_rect(ctx, GRect(0, L->scene_top, L->w, L->scene_bot - L->scene_top), 0, GCornerNone);
   graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-  graphics_draw_bitmap_in_rect(ctx, s_bg, GRect((L->w - BG_TOWN_W) / 2, L->scene_bot - BG_TOWN_H,
+  graphics_draw_bitmap_in_rect(ctx, s_bg, GRect(SNAP((L->w - BG_TOWN_W) / 2), L->scene_bot - BG_TOWN_H,
                                                  BG_TOWN_W, BG_TOWN_H));
   // お店の前でひと休み（ゆっくり呼吸）
-  int bob = (s_anim_ms / 700) % 2;
-  int hero_x = L->w / 2 - 34;
-  int hero_y = L->ground_top + 4 - HERO_H + bob;
-  gfx_draw_hero(ctx, hero_x, hero_y, HERO_POSE_IDLE, 1, false);
+  int bob = ((s_anim_ms / 700) % 2) * PX;
+  int hero_x = SNAP(L->w / 2 - 40);
+  int hero_y = L->ground_top + 2 * PX - HERO_H + bob;
+  gfx_draw_hero(ctx, hero_x, hero_y, HERO_POSE_IDLE, PX, false);
 }
 
 static void draw_top_bar(GContext *ctx, const Layout *L, const char *place) {
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, GRect(0, 0, L->w, L->top_h), 0, GCornerNone);
-  graphics_context_set_stroke_color(ctx, GColorChromeYellow);
-  graphics_draw_line(ctx, GPoint(0, L->top_h - 1), GPoint(L->w, L->top_h - 1));
 
   static char gold[16];
   snprintf(gold, sizeof(gold), "%ld", (long)game_gold());
-  GFont font = gfx_font_small_bold();
-  int text_h = IS_LARGE_SCREEN ? 22 : 16;
-  int ty = L->top_h - text_h - 3;
+  int ty = L->top_h - TEXT_H - 2 * PX;
+  int gw = gfx_text_width(gold);
 #if defined(PBL_ROUND)
   // 丸型：上端は狭いので所持金だけ中央に
-  GSize sz = graphics_text_layout_get_content_size(gold, font, GRect(0, 0, L->w, 30),
-                                                    GTextOverflowModeFill, GTextAlignmentLeft);
-  int gx = (L->w - sz.w + 12) / 2;
-  gfx_draw_coin(ctx, gx - 8, ty + text_h / 2 + 2);
-  gfx_draw_text(ctx, gold, font, GRect(gx, ty - 1, sz.w + 4, text_h + 4), GTextAlignmentLeft, GColorWhite);
+  int gx = SNAP((L->w - gw + 6 * PX) / 2);
   (void)place;
 #else
-  gfx_draw_text(ctx, place, font, GRect(4, ty - 1, L->w - 60, text_h + 4), GTextAlignmentLeft, GColorChromeYellow);
-  GSize sz = graphics_text_layout_get_content_size(gold, font, GRect(0, 0, L->w, 30),
-                                                    GTextOverflowModeFill, GTextAlignmentLeft);
-  int gx = L->w - 4 - sz.w;
-  gfx_draw_coin(ctx, gx - 7, ty + text_h / 2 + 2);
-  gfx_draw_text(ctx, gold, font, GRect(gx, ty - 1, sz.w + 2, text_h + 4), GTextAlignmentLeft, GColorWhite);
+  gfx_text(ctx, place, GRect(2 * PX, ty, L->w - gw - 14 * PX, LINE_H), GTextAlignmentLeft, THEME_FG);
+  int gx = L->w - 2 * PX - gw;
 #endif
+  gfx_draw_coin(ctx, gx - 6 * PX, ty);
+  gfx_text(ctx, gold, GRect(gx, ty, gw + PX, LINE_H), GTextAlignmentLeft, THEME_GOLD);
 }
 
 static void draw_bottom_panel(GContext *ctx, const Layout *L, bool exploring, int p, int clear_ms) {
   int y0 = L->scene_bot;
+  GRect panel = GRect(0, y0, L->w, L->bot_h);
+#if defined(PBL_ROUND)
+  // 丸型は枠の角が欠けるので、上に線を引くだけにする
   graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_rect(ctx, GRect(0, y0, L->w, L->bot_h), 0, GCornerNone);
-  graphics_context_set_stroke_color(ctx, GColorChromeYellow);
-  graphics_draw_line(ctx, GPoint(0, y0), GPoint(L->w, y0));
-
-  int inset = PBL_IF_ROUND_ELSE(L->w / 7, 4);
-  GFont font = gfx_font_small();
-  GTextAlignment align = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
-  int y = y0 + 3;
+  graphics_fill_rect(ctx, panel, 0, GCornerNone);
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, GRect(0, y0 + PX, L->w, PX), 0, GCornerNone);
+  int inset = SNAP(L->w / 6);
+  GRect inner = GRect(inset, y0 + 3 * PX, L->w - inset * 2, L->bot_h - 3 * PX);
+  GTextAlignment align = GTextAlignmentCenter;
+#else
+  gfx_draw_window(ctx, panel);
+  GRect inner = gfx_window_inner(panel);
+  GTextAlignment align = GTextAlignmentLeft;
+#endif
+  int y = inner.origin.y;
 
   if (exploring) {
     // 探索の進行バーと残り時間
     static char left[12];
     int remain = (clear_ms - p + 999) / 1000;
     snprintf(left, sizeof(left), "%ds", remain);
-    int bar_x = inset;
-    int bar_w = L->w - inset * 2 - 26;
-    int filled = (clear_ms > 0) ? (bar_w - 2) * p / clear_ms : 0;
-    graphics_context_set_stroke_color(ctx, GColorWhite);
-    graphics_draw_rect(ctx, GRect(bar_x, y + 3, bar_w, 7));
-    graphics_context_set_fill_color(ctx, GColorChromeYellow);
-    graphics_fill_rect(ctx, GRect(bar_x + 1, y + 4, filled, 5), 0, GCornerNone);
-    gfx_draw_text(ctx, left, gfx_font_small_bold(), GRect(bar_x + bar_w, y - 4, 26, 18),
-                  GTextAlignmentRight, GColorWhite);
-    y += 12;
+    int left_w = gfx_text_width("000s");
+    int bar_x = inner.origin.x;
+    int bar_w = SNAP(inner.size.w - left_w - 2 * PX);
+    int bar_h = 3 * PX;
+    graphics_context_set_fill_color(ctx, THEME_DIM);
+    graphics_fill_rect(ctx, GRect(bar_x, y + PX, bar_w, bar_h), 0, GCornerNone);
+    int filled = (clear_ms > 0) ? SNAP(bar_w * p / clear_ms) : 0;
+    graphics_context_set_fill_color(ctx, THEME_GOLD);
+    graphics_fill_rect(ctx, GRect(bar_x, y + PX, filled, bar_h), 0, GCornerNone);
+    gfx_text(ctx, left, GRect(inner.origin.x + inner.size.w - left_w, y, left_w, LINE_H),
+             GTextAlignmentRight, THEME_FG);
+    y += LINE_H;
   }
 
-  GRect box = GRect(inset, y, L->w - inset * 2, y0 + L->bot_h - y);
-  gfx_draw_text(ctx, game_log(), font, box, align, GColorWhite);
+  GRect box = GRect(inner.origin.x, y, inner.size.w, inner.origin.y + inner.size.h - y);
+  int lines = gfx_text(ctx, game_log(), box, align, THEME_FG);
 
-  if (!exploring) {
-    GSize sz = graphics_text_layout_get_content_size(game_log(), font, box,
-                                                      GTextOverflowModeWordWrap, align);
-    int line_h = IS_LARGE_SCREEN ? 20 : 16;
-    if (sz.h <= line_h + 2) {
-      gfx_draw_text(ctx, "SELECT: Menu", font, GRect(inset, y + line_h, box.size.w, line_h + 4),
-                    align, GColorLightGray);
-    }
+  if (!exploring && (lines + 1) * LINE_H <= box.size.h) {
+    gfx_text(ctx, "SELECT: MENU", GRect(box.origin.x, y + lines * LINE_H, box.size.w, LINE_H),
+             align, THEME_SUB);
   }
 }
 

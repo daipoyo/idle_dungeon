@@ -3,26 +3,40 @@
 #include "art_info.h"
 
 // ============================================================
-// 共通の描画ヘルパー
+// 共通の描画ヘルパー（ゲームボーイカラー風）
+//   絵も文字も「1ドット = PX x PX ピクセル」で描く。
 // ============================================================
 
-// 画面の広さに応じたフォント
 #define IS_LARGE_SCREEN (PBL_DISPLAY_WIDTH >= 200)
-GFont gfx_font_small(void);       // 本文
-GFont gfx_font_small_bold(void);  // 本文（太字）
-GFont gfx_font_title(void);       // 見出し
 
-// メニュー画面の配色（RPG風の青いウィンドウ）
-#define THEME_BG GColorOxfordBlue
+// 座標をドットの格子に合わせる（PX は 2 のべき乗）
+#define SNAP(v) ((v) & ~(PX - 1))
+
+// メニュー画面の配色（黒いウィンドウに白い文字）
+#define THEME_BG GColorBlack
 #define THEME_FG GColorWhite
-#define THEME_SUB GColorPictonBlue
-#define THEME_HI_BG GColorChromeYellow
-#define THEME_HI_FG GColorBlack
-#define THEME_HEADER_BG GColorDukeBlue
+#define THEME_SUB GColorLightGray
+#define THEME_DIM GColorDarkGray
+#define THEME_HI GColorIcterine    // 選択中の行の文字
+#define THEME_WARN GColorMelon
+#define THEME_GOLD GColorIcterine
 
 static inline GColor gfx_argb(uint8_t argb) { return (GColor){ .argb = argb }; }
 
-// 文字マップを描画する（lut=NULL なら標準パレット）
+// ---- ドットフォント ----
+#define TEXT_H (5 * PX)            // 文字の高さ
+#define LINE_H (6 * PX)            // 行の高さ
+// 1行の幅（ピクセル）
+int gfx_text_width(const char *text);
+// 枠の幅で折り返したときの行数
+int gfx_text_lines(const char *text, int width);
+// 枠の中に折り返して描く（枠の高さに入らない行は描かない）。描いた行数を返す
+int gfx_text(GContext *ctx, const char *text, GRect box, GTextAlignment align, GColor color);
+// 縁取り付きの文字（背景の上に出す見出し用）
+void gfx_text_outlined(GContext *ctx, const char *text, GRect box, GTextAlignment align,
+                       GColor color, GColor outline);
+
+// 文字マップを描画する（lut=NULL なら標準パレット）。scale は1ドットのピクセル数
 void gfx_draw_charmap(GContext *ctx, const char *const *rows, int w, int h,
                       int x, int y, int scale, bool flip, const uint8_t *lut);
 
@@ -33,42 +47,48 @@ typedef enum {
   HERO_POSE_ATTACK,
 } HeroPose;
 
-// 勇者を描く（装備中の武器・防具が見た目に反映される）
+// 勇者の大きさ（PX で描いたときのピクセル数）
+#define HERO_W (HERO_MAP_W * PX)
+#define HERO_H (HERO_MAP_H * PX)
+// 勇者を描く（装備中の武器・防具が見た目に反映される）。scale は1ドットのピクセル数
 void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool flip);
 
-// アイテムアイコン（16x16）。使う画面で acquire / release すること
+// アイテムアイコン（ICON_SIZE 四方）。使う画面で acquire / release すること
 void gfx_items_acquire(void);
 void gfx_items_release(void);
 void gfx_draw_item_icon(GContext *ctx, int item_id, int x, int y);
 
-// ダンジョンごとの敵画像（24x24 x 2フレーム）のリソースID
+// ダンジョンごとの敵画像（ENEMY_SIZE 四方 x 2フレーム）のリソースID
 uint32_t gfx_enemy_resource(int dungeon);
 
-// 店主の画像（共有）
+// 店主の顔の画像（共有）
 GBitmap *gfx_keeper_acquire(void);
 void gfx_keeper_release(void);
 
-// メニューの1行（アイコン＋タイトル＋サブテキスト＋右端の短い文字）
+// メニューの1行（カーソル＋アイコン＋タイトル＋サブテキスト＋右端の短い文字）
 #define ROW_H (IS_LARGE_SCREEN ? 48 : 40)
 typedef struct {
   int icon;            // アイテムアイコン番号（-1 でなし）
-  GBitmap *bitmap;     // アイコンの代わりに描く 24x24 の画像（NULL 可）
+  GBitmap *bitmap;     // アイコンの代わりに描く ENEMY_SIZE 四方の画像（NULL 可）
   const char *title;
   const char *sub;
   const char *right;   // NULL 可
   bool dim;            // 使えない項目は暗く表示
-  bool warn_sub;       // サブテキストを警告色（赤）にする
+  bool warn_sub;       // サブテキストを警告色にする
 } RowSpec;
 void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row);
 void gfx_setup_menu(MenuLayer *menu, Window *window);
-// サブ行の見出し
+// セクションの見出し
+#define MENU_HEADER_H 18
 void gfx_draw_header(GContext *ctx, const Layer *cell, const char *text);
 
 // 小物
-void gfx_draw_coin(GContext *ctx, int cx, int cy);
-void gfx_draw_heart(GContext *ctx, int x, int y);
-void gfx_draw_panel(GContext *ctx, GRect r, GColor fill, GColor border);
-void gfx_draw_text(GContext *ctx, const char *text, GFont font, GRect r,
-                   GTextAlignment align, GColor color);
-void gfx_draw_shadow_text(GContext *ctx, const char *text, GFont font, GRect r,
-                          GTextAlignment align, GColor color);
+void gfx_draw_coin(GContext *ctx, int x, int y);         // 左上座標。5ドット四方
+void gfx_draw_heart(GContext *ctx, int x, int y);        // 左上座標。文字1つ分
+void gfx_draw_cursor(GContext *ctx, int x, int y, GColor color);  // 右向き三角
+void gfx_draw_spark(GContext *ctx, int cx, int cy);
+void gfx_draw_poof(GContext *ctx, int cx, int cy, int frame);
+// ウィンドウ枠（黒地に白い線）
+void gfx_draw_window(GContext *ctx, GRect r);
+// ウィンドウ枠の内側（文字を置ける範囲）
+GRect gfx_window_inner(GRect r);
