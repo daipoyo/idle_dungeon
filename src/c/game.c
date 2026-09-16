@@ -49,6 +49,62 @@ const char *const g_slot_names[EQUIP_SLOTS] = {
   "Weapon", "Shield", "Head", "Body", "Hands", "Feet", "Amulet", "Ring", "Ring",
 };
 
+// 接尾辞・接頭辞（画面が狭いので短い単語だけ）
+const AffixDef g_prefixes[] = {
+  { "Sharp",   AFFIX_ATK, 100 },
+  { "Cruel",   AFFIX_ATK, 150 },
+  { "Savage",  AFFIX_ATK, 200 },
+  { "Sturdy",  AFFIX_DEF, 100 },
+  { "Plated",  AFFIX_DEF, 150 },
+  { "Adamant", AFFIX_DEF, 200 },
+  { "Hale",    AFFIX_HP,  100 },
+  { "Vital",   AFFIX_HP,  150 },
+  { "Titan",   AFFIX_HP,  200 },
+};
+const int g_prefix_count = sizeof(g_prefixes) / sizeof(g_prefixes[0]);
+
+const AffixDef g_suffixes[] = {
+  { "Power",  AFFIX_ATK, 120 },
+  { "Fury",   AFFIX_ATK, 180 },
+  { "Wrath",  AFFIX_ATK, 240 },
+  { "Guard",  AFFIX_DEF, 120 },
+  { "Stone",  AFFIX_DEF, 180 },
+  { "Aegis",  AFFIX_DEF, 240 },
+  { "Life",   AFFIX_HP,  120 },
+  { "Giants", AFFIX_HP,  180 },
+  { "Dragon", AFFIX_HP,  240 },
+};
+const int g_suffix_count = sizeof(g_suffixes) / sizeof(g_suffixes[0]);
+
+// セット装備（set_id 1以上）と固有装備（set_id 0）。フェーズ3で絵と一緒に増やす
+const SpecialDef g_specials[] = {
+  // 固有装備
+  { "Gutcleaver",    0, 170,  6,  0,  0, 0 },
+  { "Mirrorplate",   3, 170,  0,  5, 20, 0 },
+  { "Wolfstep",      5, 180,  0,  3, 10, 0 },
+  { "Eye of Dawn",   6, 175,  4,  2, 15, 0 },
+  { "Coil of Greed", 7, 180,  5,  0, 10, 0 },
+  { "Lastlight",     1, 175,  0,  6, 15, 0 },
+  // 亡霊狩りのセット（Ghostbane）
+  { "Ghostbane Edge", 0, 140,  4,  0,  0, 1 },
+  { "Ghostbane Mail", 3, 140,  0,  4, 12, 1 },
+  { "Ghostbane Helm", 2, 140,  0,  3,  8, 1 },
+  // 大地のセット（Earthen）
+  { "Earthen Grips",  4, 140,  3,  2,  0, 2 },
+  { "Earthen Tread",  5, 140,  0,  4,  8, 2 },
+  { "Earthen Band",   7, 140,  3,  0, 10, 2 },
+};
+const int g_special_count = sizeof(g_specials) / sizeof(g_specials[0]);
+
+const char *const g_rarity_names[RARITY_COUNT] = {
+  "Normal", "Magic", "Rare", "Set", "Unique",
+};
+
+// セットを 2個以上つけたときの1個あたりの追加
+#define SET_BONUS_ATK 3
+#define SET_BONUS_DEF 3
+#define SET_BONUS_HP 12
+
 // ============================================================
 // 保存データ
 // ============================================================
@@ -62,7 +118,7 @@ typedef struct {
   uint8_t cleared;          // ボスを倒したダンジョン（ビット）
   uint8_t auto_return_pct;  // 0 = しない
   uint8_t vibrate;
-  uint8_t pad;
+  uint8_t scrolls_id;       // 鑑定の巻物
   uint16_t runs;
   uint16_t deaths;
 } Hero;
@@ -213,7 +269,10 @@ LogStyle game_log_style(int i) {
     case LOG_LEVEL:
     case LOG_RECOVER:
     case LOG_AGENT:
+    case LOG_IDENTIFY:
       return LOG_STYLE_GREAT;
+    case LOG_ITEM:
+      return e->a >= RARITY_RARE ? LOG_STYLE_GREAT : LOG_STYLE_DUNGEON;
     case LOG_WELCOME:
     case LOG_TOWN:
       return LOG_STYLE_TOWN;
@@ -250,7 +309,19 @@ void game_log_text(int i, char *buf, size_t size) {
     case LOG_BOSS:
       snprintf(buf, size, "Defeated %s! -%dHP +%dXP +%dG", monster_name(e->a), e->b, e->c, e->d);
       break;
-    case LOG_ITEM: snprintf(buf, size, "Found %s.", base_name(e->b)); break;
+    case LOG_ITEM:
+      if (e->a >= RARITY_RARE) {
+        snprintf(buf, size, "Found a %s %s! Unidentified.", g_rarity_names[e->a % RARITY_COUNT],
+                 base_name(e->b));
+      } else if (e->a == RARITY_MAGIC) {
+        snprintf(buf, size, "Found a magic %s.", base_name(e->b));
+      } else {
+        snprintf(buf, size, "Found %s.", base_name(e->b));
+      }
+      break;
+    case LOG_IDENTIFY:
+      snprintf(buf, size, "Identified: %s %s.", g_rarity_names[e->a % RARITY_COUNT], base_name(e->b));
+      break;
     case LOG_BAG_FULL: snprintf(buf, size, "Bag full. Left %s.", base_name(e->b)); break;
     case LOG_GOLD: snprintf(buf, size, "Found %d gold.", e->b); break;
     case LOG_TRAP: snprintf(buf, size, "A trap! -%dHP", e->b); break;
@@ -284,7 +355,69 @@ const BaseDef *game_item_base(const Item *it) {
   return &g_bases[it->base - 1];
 }
 
-ItemStats game_item_stats(const Item *it) {
+bool game_item_identified(const Item *it) {
+  if (!it) return false;
+  // 白・青は最初から鑑定済み扱い
+  return it->rarity < RARITY_RARE || (it->flags & ITEM_FLAG_IDENTIFIED);
+}
+
+int game_item_special(const Item *it) {
+  if (!it || (it->rarity != RARITY_SET && it->rarity != RARITY_UNIQUE)) return -1;
+  int idx = (it->flags & ITEM_SPECIAL_MASK) >> ITEM_SPECIAL_SHIFT;
+  return idx < g_special_count ? idx : -1;
+}
+
+// seed から接辞などを決めるための値。k を変えると別の値になる
+static uint32_t item_hash(const Item *it, int k) {
+  uint32_t h = it->seed * 2654435761u + it->base * 40503u + it->ilvl * 97u + k * 2246822519u;
+  h ^= h >> 13;
+  h *= 3266489917u;
+  h ^= h >> 16;
+  return h;
+}
+
+int game_item_affix_count(const Item *it) {
+  if (!it || !game_item_identified(it)) return 0;
+  switch (it->rarity) {
+    case RARITY_MAGIC: return 1 + (int)(item_hash(it, 1) % 2);
+    case RARITY_RARE: return 3 + (int)(item_hash(it, 1) % 2);
+    default: return 0;
+  }
+}
+
+const AffixDef *game_item_affix(const Item *it, int i, int *value) {
+  if (i < 0 || i >= game_item_affix_count(it)) return NULL;
+  // 偶数番目は接頭辞、奇数番目は接尾辞
+  const AffixDef *table = (i % 2 == 0) ? g_prefixes : g_suffixes;
+  int count = (i % 2 == 0) ? g_prefix_count : g_suffix_count;
+  const AffixDef *a = &table[item_hash(it, 10 + i) % count];
+  if (value) {
+    int v = it->ilvl;
+    int base;
+    switch (a->stat) {
+      case AFFIX_ATK: base = 1 + v * 2 / 5; break;
+      case AFFIX_DEF: base = 1 + v / 3; break;
+      default: base = 3 + v * 3 / 2; break;
+    }
+    int out = base * a->power / 100;
+    *value = out < 1 ? 1 : out;
+  }
+  return a;
+}
+
+int game_set_pieces_equipped(const Item *it) {
+  int idx = game_item_special(it);
+  if (idx < 0 || g_specials[idx].set_id == 0) return 0;
+  int n = 0;
+  for (int i = 0; i < EQUIP_SLOTS; i++) {
+    int other = game_item_special(&s_equip[i]);
+    if (other >= 0 && g_specials[other].set_id == g_specials[idx].set_id) n++;
+  }
+  return n;
+}
+
+// 接辞・強化・セットを含まない、基本アイテムの性能
+static ItemStats base_stats(const Item *it) {
   ItemStats s = { 0, 0, 0 };
   const BaseDef *b = game_item_base(it);
   if (!b) return s;
@@ -303,10 +436,78 @@ ItemStats game_item_stats(const Item *it) {
   return s;
 }
 
+ItemStats game_item_stats(const Item *it) {
+  ItemStats s = base_stats(it);
+  if (!game_item_base(it)) return s;
+  if (!game_item_identified(it)) return s;   // 未鑑定は基本性能しか分からない
+
+  int special = game_item_special(it);
+  if (special >= 0) {
+    const SpecialDef *sp = &g_specials[special];
+    s.atk = s.atk * sp->bonus_pct / 100 + sp->atk;
+    s.def = s.def * sp->bonus_pct / 100 + sp->def;
+    s.hp = s.hp * sp->bonus_pct / 100 + sp->hp;
+    if (sp->set_id && game_set_pieces_equipped(it) >= 2) {
+      s.atk += SET_BONUS_ATK;
+      s.def += SET_BONUS_DEF;
+      s.hp += SET_BONUS_HP;
+    }
+  }
+  for (int i = 0; i < game_item_affix_count(it); i++) {
+    int v = 0;
+    const AffixDef *a = game_item_affix(it, i, &v);
+    if (!a) continue;
+    if (a->stat == AFFIX_ATK) s.atk += v;
+    else if (a->stat == AFFIX_DEF) s.def += v;
+    else s.hp += v;
+  }
+  // 強化（+1 ごとに基本性能の 8%）
+  if (it->plus) {
+    ItemStats b = base_stats(it);
+    s.atk += b.atk * 8 * it->plus / 100;
+    s.def += b.def * 8 * it->plus / 100;
+    s.hp += b.hp * 8 * it->plus / 100;
+  }
+  return s;
+}
+
+void game_item_name(const Item *it, char *buf, size_t size) {
+  const BaseDef *b = game_item_base(it);
+  if (!b) {
+    snprintf(buf, size, "---");
+    return;
+  }
+  int special = game_item_special(it);
+  if (special >= 0 && game_item_identified(it)) {
+    snprintf(buf, size, "%s", g_specials[special].name);
+    return;
+  }
+  int n = 0;
+  if (it->plus) n += snprintf(buf + n, size - n, "+%d ", it->plus);
+  const AffixDef *prefix = game_item_affix(it, 0, NULL);
+  if (prefix) n += snprintf(buf + n, size - n, "%s ", prefix->name);
+  n += snprintf(buf + n, size - n, "%s", b->name);
+  const AffixDef *suffix = game_item_affix(it, 1, NULL);
+  if (suffix && n < (int)size) snprintf(buf + n, size - n, " of %s", suffix->name);
+}
+
 int game_item_price(const Item *it) {
   if (!game_item_base(it)) return 0;
+  static const uint8_t RARITY_MUL[RARITY_COUNT] = { 10, 18, 30, 50, 80 };
   int v = it->ilvl;
-  return 3 + v * 2 + v * v / 4;
+  int price = (3 + v * 2 + v * v / 4) * RARITY_MUL[it->rarity % RARITY_COUNT] / 10;
+  if (!game_item_identified(it)) price = price / 2;   // 未鑑定は買い叩かれる
+  return price + price * it->plus / 10;
+}
+
+// レア度を決める（深いダンジョンほど良い物が出る）
+static uint8_t roll_rarity(int dungeon) {
+  uint32_t r = rnd(1000);
+  if (r < 4 + (uint32_t)dungeon / 2) return RARITY_UNIQUE;
+  if (r < 16 + (uint32_t)dungeon) return RARITY_SET;
+  if (r < 90 + (uint32_t)dungeon * 5) return RARITY_RARE;
+  if (r < 360 + (uint32_t)dungeon * 8) return RARITY_MAGIC;
+  return RARITY_NORMAL;
 }
 
 static Item make_item(int base, int ilvl) {
@@ -314,6 +515,30 @@ static Item make_item(int base, int ilvl) {
   it.base = (uint16_t)(base + 1);
   it.seed = (uint16_t)rnd(65536);
   it.ilvl = (uint8_t)(ilvl < 1 ? 1 : ilvl);
+  it.rarity = RARITY_NORMAL;
+  it.flags = ITEM_FLAG_IDENTIFIED;
+  return it;
+}
+
+// ダンジョンで拾ったアイテムを作る（レア度つき）
+static Item make_drop_item(int ilvl, int dungeon) {
+  uint8_t rarity = roll_rarity(dungeon);
+  int special = -1;
+  if (rarity == RARITY_SET || rarity == RARITY_UNIQUE) {
+    // その種類の中から1つ選ぶ。なければレアに落とす
+    int candidates[16], n = 0;
+    for (int i = 0; i < g_special_count && n < 16; i++) {
+      bool is_set = g_specials[i].set_id != 0;
+      if (is_set == (rarity == RARITY_SET)) candidates[n++] = i;
+    }
+    if (n > 0) special = candidates[rnd(n)];
+    else rarity = RARITY_RARE;
+  }
+  Item it = make_item(special >= 0 ? g_specials[special].base : rnd(g_base_count), ilvl);
+  it.rarity = rarity;
+  if (special >= 0) it.flags |= (uint8_t)(special << ITEM_SPECIAL_SHIFT);
+  // 黄色以上は未鑑定で落ちる
+  if (rarity >= RARITY_RARE) it.flags &= (uint8_t)~ITEM_FLAG_IDENTIFIED;
   return it;
 }
 
@@ -354,6 +579,7 @@ bool game_equip_from_bag(int bag_index) {
   const Item *it = game_bag(bag_index);
   const BaseDef *b = game_item_base(it);
   if (!b) return false;
+  if (!game_item_identified(it)) return false;   // 未鑑定の物は身に着けられない
   int slot = b->slot;
   if (slot == SLOT_RING1 && s_equip[SLOT_RING1].base && !s_equip[SLOT_RING2].base) slot = SLOT_RING2;
   Item picked = *it;
@@ -585,12 +811,12 @@ static int damage(int atk, int def) {
 }
 
 static void found_item(int ilvl) {
-  Item it = make_item(rnd(g_base_count), ilvl);
+  Item it = make_drop_item(ilvl, s_run.dungeon);
   if (bag_add(&it)) {
     s_batch.items++;
-    log_push(LOG_ITEM, 0, it.base - 1, 0, 0);
+    log_push(LOG_ITEM, it.rarity, it.base - 1, 0, 0);
   } else {
-    log_push(LOG_BAG_FULL, 0, it.base - 1, 0, 0);
+    log_push(LOG_BAG_FULL, it.rarity, it.base - 1, 0, 0);
   }
 }
 
@@ -885,6 +1111,63 @@ BuyResult game_buy_portal(void) {
   s_hero.portals++;
   game_save();
   return BUY_OK;
+}
+
+BuyResult game_buy_identify(void) {
+  if (s_hero.scrolls_id >= MAX_IDENT_SCROLLS) return BUY_FULL;
+  if (s_hero.gold < IDENT_SCROLL_PRICE) return BUY_NO_GOLD;
+  s_hero.gold -= IDENT_SCROLL_PRICE;
+  s_hero.scrolls_id++;
+  game_save();
+  return BUY_OK;
+}
+
+// ============================================================
+// 鑑定
+// ============================================================
+int game_identify_scrolls(void) { return s_hero.scrolls_id; }
+
+int game_identify_fee(const Item *it) {
+  if (!it || !game_item_base(it)) return 0;
+  // 良い物ほど高い
+  int fee = 20 + it->ilvl * 4;
+  if (it->rarity >= RARITY_SET) fee = fee * 3 / 2;
+  return fee;
+}
+
+int game_unidentified_count(void) {
+  int n = 0;
+  for (int i = 0; i < BAG_SIZE; i++) {
+    if (s_bag[i].base && !game_item_identified(&s_bag[i])) n++;
+  }
+  return n;
+}
+
+static IdentResult identify(int bag_index) {
+  const Item *it = game_bag(bag_index);
+  if (!it || game_item_identified(it)) return IDENT_NONE;
+  s_bag[bag_index].flags |= ITEM_FLAG_IDENTIFIED;
+  log_push(LOG_IDENTIFY, s_bag[bag_index].rarity, s_bag[bag_index].base - 1, 0, 0);
+  game_save();
+  return IDENT_OK;
+}
+
+IdentResult game_identify_with_gold(int bag_index) {
+  const Item *it = game_bag(bag_index);
+  if (!it || game_item_identified(it)) return IDENT_NONE;
+  if (s_run.mode != RUN_NONE) return IDENT_NONE;   // 鑑定屋は町にしかいない
+  int fee = game_identify_fee(it);
+  if (s_hero.gold < fee) return IDENT_NO_GOLD;
+  s_hero.gold -= fee;
+  return identify(bag_index);
+}
+
+IdentResult game_identify_with_scroll(int bag_index) {
+  const Item *it = game_bag(bag_index);
+  if (!it || game_item_identified(it)) return IDENT_NONE;
+  if (s_hero.scrolls_id == 0) return IDENT_NO_SCROLL;
+  s_hero.scrolls_id--;
+  return identify(bag_index);
 }
 
 // ============================================================

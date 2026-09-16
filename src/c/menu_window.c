@@ -9,13 +9,14 @@ typedef enum {
   CMD_DUNGEONS,
   CMD_SHOP,
   CMD_STATUS,
+  CMD_IDENTIFY,
   CMD_AGENT,
   CMD_SETTINGS,
   CMD_PORTAL,
   CMD_WALK_BACK,
 } Command;
 
-#define MAX_COMMANDS 6
+#define MAX_COMMANDS 7
 
 static Window *s_window;
 static MenuLayer *s_menu;
@@ -26,6 +27,7 @@ static int build_commands(Command *out) {
     out[n++] = CMD_DUNGEONS;
     out[n++] = CMD_SHOP;
     out[n++] = CMD_STATUS;
+    if (game_unidentified_count() > 0) out[n++] = CMD_IDENTIFY;
     if (game_drop_exists()) out[n++] = CMD_AGENT;
     out[n++] = CMD_SETTINGS;
   } else {
@@ -68,6 +70,12 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
       row.title = "Status";
       row.sub = game_can_change_gear() ? "Gear & bag" : "View only";
       break;
+    case CMD_IDENTIFY:
+      row.icon = 13;
+      row.title = "Appraiser";
+      snprintf(sub, sizeof(sub), "%d unidentified", game_unidentified_count());
+      row.sub = sub;
+      break;
     case CMD_AGENT:
       row.icon = 11;
       row.title = "Lost Gear";
@@ -109,6 +117,9 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
       break;
     case CMD_STATUS:
       status_window_push();
+      break;
+    case CMD_IDENTIFY:
+      identify_window_push();
       break;
     case CMD_AGENT:
       agent_window_push();

@@ -241,7 +241,8 @@ static void list_header_update_proc(Layer *layer, GContext *ctx) {
 // 購入一覧: ポーション、帰還の巻物、装備（勇者のレベルに合わせた品）
 #define BUY_POTION 0
 #define BUY_PORTAL 1
-#define BUY_GEAR_FIRST 2
+#define BUY_IDENT 2
+#define BUY_GEAR_FIRST 3
 
 static int sell_rows(void) {
   int n = game_bag_count();
@@ -283,6 +284,12 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
       snprintf(sub, sizeof(sub), "%dG To town", PORTAL_PRICE);
       snprintf(right, sizeof(right), "%d/%d", game_portals(), MAX_PORTALS);
       row.warn_sub = game_gold() < PORTAL_PRICE;
+    } else if (index->row == BUY_IDENT) {
+      row.icon = 13;
+      row.title = "Identify Scroll";
+      snprintf(sub, sizeof(sub), "%dG Reveals gear", IDENT_SCROLL_PRICE);
+      snprintf(right, sizeof(right), "%d/%d", game_identify_scrolls(), MAX_IDENT_SCROLLS);
+      row.warn_sub = game_gold() < IDENT_SCROLL_PRICE;
     } else {
       int i = index->row - BUY_GEAR_FIRST;
       Item it = game_shop_gear(i);
@@ -305,10 +312,15 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
       row.sub = "Go find loot!";
       row.dim = true;
     } else {
+      static char name[40];
       const BaseDef *b = game_item_base(it);
       row.icon = b->icon;
-      row.title = b->name;
-      snprintf(sub, sizeof(sub), "Sell %dG", game_item_price(it));
+      game_item_name(it, name, sizeof(name));
+      row.title = name;
+      row.tint_title = true;
+      row.title_color = gfx_rarity_color(it);
+      snprintf(sub, sizeof(sub), game_item_identified(it) ? "Sell %dG" : "Sell %dG (unident.)",
+               game_item_price(it));
       row.sub = sub;
     }
   }
@@ -320,6 +332,7 @@ static void list_select(MenuLayer *menu, MenuIndex *index, void *data) {
     BuyResult r;
     if (index->row == BUY_POTION) r = game_buy_potion();
     else if (index->row == BUY_PORTAL) r = game_buy_portal();
+    else if (index->row == BUY_IDENT) r = game_buy_identify();
     else r = game_buy_gear(index->row - BUY_GEAR_FIRST);
     switch (r) {
       case BUY_OK: s_speech = pick(THANKS, ARRAY_LEN(THANKS)); break;

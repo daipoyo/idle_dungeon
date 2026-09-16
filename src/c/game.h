@@ -19,6 +19,8 @@
 #define DROP_EXPIRE_SEC (72 * 60 * 60)   // 死亡時に残した物が消えるまで
 #define POTION_PRICE 25
 #define PORTAL_PRICE 60
+#define MAX_IDENT_SCROLLS 9
+#define IDENT_SCROLL_PRICE 45
 
 // ---- 装備枠 ----
 typedef enum {
@@ -26,15 +28,32 @@ typedef enum {
   SLOT_AMULET, SLOT_RING1, SLOT_RING2,
 } EquipSlot;
 
+// ---- レア度 ----
+typedef enum {
+  RARITY_NORMAL = 0,   // 白：接辞なし
+  RARITY_MAGIC,        // 青：接辞 1〜2
+  RARITY_RARE,         // 黄：接辞 3〜4
+  RARITY_SET,          // 緑：セット装備
+  RARITY_UNIQUE,       // 金：固有装備
+  RARITY_COUNT,
+} Rarity;
+
+#define ITEM_FLAG_IDENTIFIED 0x01
+// セット・固有装備の番号（g_specials の添字）を flags の上位ビットに入れる
+#define ITEM_SPECIAL_SHIFT 1
+#define ITEM_SPECIAL_MASK 0x7E
+#define MAX_AFFIXES 4
+#define MAX_PLUS 10
+
 // ---- アイテム（保存形式。1個8バイト） ----
 //   性能は base・seed・ilvl から毎回計算する（保存領域が小さいため）
 typedef struct {
   uint16_t base;     // 基本アイテムの番号 + 1（0 は空）
-  uint16_t seed;
+  uint16_t seed;     // 接辞と性能のばらつきの元
   uint8_t ilvl;      // アイテムレベル
-  uint8_t rarity;    // フェーズ2で使う
-  uint8_t flags;     // フェーズ2で使う（鑑定済みなど）
-  uint8_t plus;      // 強化段階（フェーズ2で使う）
+  uint8_t rarity;    // Rarity
+  uint8_t flags;     // 鑑定済み + セット/固有装備の番号
+  uint8_t plus;      // 強化段階（0〜MAX_PLUS）
 } Item;
 
 typedef struct {
@@ -42,6 +61,24 @@ typedef struct {
   uint8_t slot;      // EquipSlot（指輪は SLOT_RING1）
   uint8_t icon;      // items.png の番号
 } BaseDef;
+
+// ---- 接辞（seed から決まる。名前と性能の両方に効く） ----
+typedef enum { AFFIX_ATK, AFFIX_DEF, AFFIX_HP } AffixStat;
+
+typedef struct {
+  const char *name;
+  uint8_t stat;      // AffixStat
+  uint8_t power;     // 強さ（100 = 標準）
+} AffixDef;
+
+// ---- セット・固有装備 ----
+typedef struct {
+  const char *name;
+  uint8_t base;      // 基本アイテムの番号
+  uint8_t bonus_pct; // 基本性能の倍率（%）
+  int16_t atk, def, hp;   // 追加の性能（アイテムレベルによらない）
+  uint8_t set_id;    // 0 = 固有装備、1以上 = セット番号
+} SpecialDef;
 
 typedef struct {
   int16_t atk;
@@ -96,7 +133,11 @@ typedef enum {
   LOG_AGENT,        // b=回収した数（代行業者）
   LOG_NO_STEPS,     // 歩数が取れない
   LOG_SUMMARY,      // まとめ a=レベル b=戦闘 c=ゴールド d=アイテム
+  LOG_IDENTIFY,     // 鑑定した a=レア度 b=基本アイテム
 } LogType;
+
+// レア度の呼び名（White/Blue/Yellow/Green/Gold）
+extern const char *const g_rarity_names[RARITY_COUNT];
 
 // ログの見た目の種類（画面で色を変える）
 typedef enum {
@@ -153,9 +194,27 @@ bool game_vibrate(void);
 void game_toggle_vibrate(void);
 
 // ---- アイテム ----
+extern const AffixDef g_prefixes[];
+extern const int g_prefix_count;
+extern const AffixDef g_suffixes[];
+extern const int g_suffix_count;
+extern const SpecialDef g_specials[];
+extern const int g_special_count;
+
+// 未鑑定なら基本性能だけ、鑑定済みなら接辞と強化も含めた性能
 ItemStats game_item_stats(const Item *it);
 const BaseDef *game_item_base(const Item *it);
 int game_item_price(const Item *it);        // 売値
+// 接辞・セット・固有装備を含めた名前（未鑑定なら基本アイテム名のまま）
+void game_item_name(const Item *it, char *buf, size_t size);
+bool game_item_identified(const Item *it);
+int game_item_special(const Item *it);      // g_specials の添字。なければ -1
+// 鑑定済みの接辞の数と、i 番目の接辞（未鑑定なら 0 個）
+int game_item_affix_count(const Item *it);
+const AffixDef *game_item_affix(const Item *it, int i, int *value);
+// 同じセットの装備を何個つけているか（セット装備でなければ 0）
+int game_set_pieces_equipped(const Item *it);
+
 const Item *game_equipped(int slot);
 const Item *game_bag(int i);
 int game_bag_count(void);
@@ -172,6 +231,16 @@ typedef enum { BUY_OK, BUY_NO_GOLD, BUY_FULL } BuyResult;
 BuyResult game_buy_gear(int i);
 BuyResult game_buy_potion(void);
 BuyResult game_buy_portal(void);
+BuyResult game_buy_identify(void);
+
+// ---- 鑑定 ----
+//   黄色以上は未鑑定で落ちる。町の鑑定屋（お金）か、鑑定の巻物（ダンジョンでも使える）
+int game_identify_scrolls(void);
+int game_identify_fee(const Item *it);
+int game_unidentified_count(void);
+typedef enum { IDENT_OK, IDENT_NO_GOLD, IDENT_NO_SCROLL, IDENT_NONE } IdentResult;
+IdentResult game_identify_with_gold(int bag_index);
+IdentResult game_identify_with_scroll(int bag_index);
 
 // ---- 死亡時に残した物 ----
 bool game_drop_exists(void);

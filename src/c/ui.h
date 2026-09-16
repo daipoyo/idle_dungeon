@@ -19,6 +19,8 @@ void shop_window_push(void);      // お店
 void status_window_push(void);    // ステータス・装備・持ち物
 void status_window_refresh(void);
 
+void identify_window_push(void);  // 鑑定屋
+
 void agent_window_push(void);     // 回収代行業者
 
 void settings_window_push(void);  // 設定

@@ -252,7 +252,22 @@ void gfx_draw_item(GContext *ctx, const Item *it, int x, int y) {
   if (b) gfx_draw_item_icon(ctx, b->icon, x, y);
 }
 
+GColor gfx_rarity_color(const Item *it) {
+  if (!it) return THEME_FG;
+  switch (it->rarity) {
+    case RARITY_MAGIC: return GColorPictonBlue;
+    case RARITY_RARE: return GColorIcterine;
+    case RARITY_SET: return GColorBrightGreen;
+    case RARITY_UNIQUE: return GColorChromeYellow;
+    default: return THEME_FG;
+  }
+}
+
 void gfx_item_stat_text(const Item *it, char *buf, size_t size) {
+  if (it && !game_item_identified(it)) {
+    snprintf(buf, size, "Unidentified");
+    return;
+  }
   ItemStats s = game_item_stats(it);
   int n = 0;
   buf[0] = '\0';
@@ -326,6 +341,8 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   GColor fg = row->dim ? THEME_DIM : (hi ? THEME_HI : THEME_FG);
   GColor sub = row->dim ? THEME_DIM : THEME_SUB;
   if (row->warn_sub) sub = THEME_WARN;
+  // レア度の色は、選んでいない行のタイトルにだけ使う（選択中は反転して見えるため）
+  GColor title_fg = (row->tint_title && !row->dim && !hi) ? row->title_color : fg;
 
   int right_w = 0;
   if (row->right) {
@@ -333,7 +350,7 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
     gfx_text(ctx, row->right, GRect(right_edge - right_w, ty, right_w, LINE_H),
              GTextAlignmentRight, fg);
   }
-  gfx_text(ctx, row->title, GRect(x, ty, right_edge - x - right_w, LINE_H), GTextAlignmentLeft, fg);
+  gfx_text(ctx, row->title, GRect(x, ty, right_edge - x - right_w, LINE_H), GTextAlignmentLeft, title_fg);
   if (row->sub) {
     gfx_text(ctx, row->sub, GRect(x, ty + LINE_H, right_edge - x, LINE_H), GTextAlignmentLeft, sub);
   }

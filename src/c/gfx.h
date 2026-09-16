@@ -61,6 +61,8 @@ void gfx_draw_item_icon(GContext *ctx, int icon, int x, int y);
 // アイテムのアイコン（Item から）と、性能の短い文字列（"ATK+12 HP+5"）
 void gfx_draw_item(GContext *ctx, const Item *it, int x, int y);
 void gfx_item_stat_text(const Item *it, char *buf, size_t size);
+// レア度の色（白・青・黄・緑・金）
+GColor gfx_rarity_color(const Item *it);
 
 // 敵画像（ENEMY_SIZE 四方 x 2フレーム）のリソースID。番号は背景の絵と同じ
 uint32_t gfx_enemy_resource(int dungeon);
@@ -79,6 +81,8 @@ typedef struct {
   const char *right;   // NULL 可
   bool dim;            // 使えない項目は暗く表示
   bool warn_sub;       // サブテキストを警告色にする
+  bool tint_title;     // タイトルをレア度の色で描く
+  GColor title_color;
 } RowSpec;
 void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row);
 void gfx_setup_menu(MenuLayer *menu, Window *window);

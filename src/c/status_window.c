@@ -113,11 +113,20 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
       return;
     }
   }
+  static char name[40];
   const BaseDef *b = game_item_base(it);
   row.icon = b->icon;
-  row.title = b->name;
+  game_item_name(it, name, sizeof(name));
+  row.title = name;
+  row.tint_title = true;
+  row.title_color = gfx_rarity_color(it);
   gfx_item_stat_text(it, sub, sizeof(sub));
   row.sub = sub;
+  if (!game_item_identified(it)) {
+    // 未鑑定は巻物で鑑定できる。持っていなければ町の鑑定屋へ
+    snprintf(sub, sizeof(sub), game_identify_scrolls() ? "Unidentified - SELECT" : "Unidentified");
+    row.warn_sub = true;
+  }
   gfx_draw_row(ctx, cell, &row);
 }
 
@@ -126,6 +135,8 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
   bool ok;
   if (index->section == 1) {
     ok = game_unequip(index->row);
+  } else if (!game_item_identified(game_bag(index->row))) {
+    ok = game_identify_with_scroll(index->row) == IDENT_OK;   // 巻物で鑑定
   } else {
     ok = game_equip_from_bag(index->row);
   }
