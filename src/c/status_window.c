@@ -5,28 +5,13 @@
 // ============================================================
 // ステータス・装備画面
 //   セクション0: ステータスカード（勇者の姿と能力値）
-//   セクション1: 装備中（武器・防具・装飾品）… 選択で外す
-//   セクション2: 持ち物 … 選択で装備／解除
+//   セクション1: 装備（9か所）… 選ぶと外して持ち物へ
+//   セクション2: 持ち物 … 選ぶと装備する（町にいるときだけ）
 // ============================================================
 #define CARD_H (IS_LARGE_SCREEN ? 88 : 80)
 
 static Window *s_window;
 static MenuLayer *s_menu;
-
-static const char *const SLOT_NAMES[3] = { "Weapon", "Armor", "Acc." };
-
-static void format_stats(char *buf, size_t size, int id) {
-  const ItemDef *it = &g_items[id];
-  if (it->type == ITEM_MATERIAL) {
-    snprintf(buf, size, "Sell %dG", game_sell_price(id));
-  } else if (it->atk && it->def) {
-    snprintf(buf, size, "A+%d D+%d", it->atk, it->def);
-  } else if (it->atk) {
-    snprintf(buf, size, "ATK+%d", it->atk);
-  } else {
-    snprintf(buf, size, "DEF+%d", it->def);
-  }
-}
 
 static void draw_card(GContext *ctx, const Layer *cell) {
   GRect b = layer_get_bounds(cell);
@@ -49,25 +34,24 @@ static void draw_card(GContext *ctx, const Layer *cell) {
   int w = b.size.w - x - inset;
   int y = slot.origin.y + 2 * PX;
   static char buf[32];
-  snprintf(buf, sizeof(buf), "POWER %d", game_power());
+  snprintf(buf, sizeof(buf), "LV %d", game_level());
   gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_GOLD);
   y += LINE_H + PX;
-  snprintf(buf, sizeof(buf), "ATK %d", BASE_POWER + game_atk());
+  snprintf(buf, sizeof(buf), "HP %d/%d", game_hp(), game_max_hp());
+  gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_FG);
+  y += LINE_H;
+  snprintf(buf, sizeof(buf), "ATK %d", game_atk());
   gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_FG);
   y += LINE_H;
   snprintf(buf, sizeof(buf), "DEF %d", game_def());
   gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_FG);
   y += LINE_H;
-  snprintf(buf, sizeof(buf), "%ld", (long)game_gold());
-  gfx_draw_coin(ctx, x, y);
-  gfx_text(ctx, buf, GRect(x + 6 * PX, y, w - 6 * PX, LINE_H), GTextAlignmentLeft, THEME_GOLD);
-  y += LINE_H;
-  if (game_can_change_gear()) {
-    snprintf(buf, sizeof(buf), "WIN %d/%d", game_wins(), game_runs());
-    gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_SUB);
+  if (game_level() < MAX_LEVEL) {
+    snprintf(buf, sizeof(buf), "XP %ld/%ld", (long)game_xp(), (long)game_xp_next());
   } else {
-    gfx_text(ctx, "EXPLORING", GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_WARN);
+    snprintf(buf, sizeof(buf), "XP MAX");
   }
+  gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_SUB);
 }
 
 // ------------------------------------------------------------
@@ -79,8 +63,8 @@ static uint16_t get_num_sections(MenuLayer *menu, void *data) {
 
 static uint16_t get_num_rows(MenuLayer *menu, uint16_t section, void *data) {
   if (section == 0) return 1;
-  if (section == 1) return 3;
-  int n = game_owned_kinds();
+  if (section == 1) return EQUIP_SLOTS;
+  int n = game_bag_count();
   return n > 0 ? n : 1;
 }
 
@@ -89,10 +73,12 @@ static int16_t get_header_height(MenuLayer *menu, uint16_t section, void *data) 
 }
 
 static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *data) {
+  static char buf[24];
   if (section == 1) {
     gfx_draw_header(ctx, cell, game_can_change_gear() ? "EQUIPMENT" : "EQUIP (LOCKED)");
   } else if (section == 2) {
-    gfx_draw_header(ctx, cell, "BAG");
+    snprintf(buf, sizeof(buf), "BAG %d/%d", game_bag_count(), BAG_SIZE);
+    gfx_draw_header(ctx, cell, buf);
   }
 }
 
@@ -102,56 +88,50 @@ static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
 
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *data) {
   static char sub[32];
-  static char right[8];
   if (index->section == 0) {
     draw_card(ctx, cell);
     return;
   }
   RowSpec row = { .icon = -1 };
+  const Item *it;
   if (index->section == 1) {
-    int id = game_equipped((ItemType)index->row);
-    if (id >= 0) {
-      row.icon = id;
-      row.title = g_items[id].name;
-      char stats[24];
-      format_stats(stats, sizeof(stats), id);
-      snprintf(sub, sizeof(sub), "%s %s", SLOT_NAMES[index->row], stats);
-    } else {
+    it = game_equipped(index->row);
+    if (!it) {
       row.title = "(none)";
-      snprintf(sub, sizeof(sub), "%s", SLOT_NAMES[index->row]);
+      row.sub = g_slot_names[index->row];
       row.dim = true;
+      gfx_draw_row(ctx, cell, &row);
+      return;
     }
-    row.sub = sub;
   } else {
-    int id = game_owned_nth(index->row);
-    if (id < 0) {
+    it = game_bag(index->row);
+    if (!it) {
       row.title = "Empty";
       row.sub = "Go find loot!";
       row.dim = true;
-    } else {
-      row.icon = id;
-      row.title = g_items[id].name;
-      format_stats(sub, sizeof(sub), id);
-      row.sub = sub;
-      snprintf(right, sizeof(right), "%sx%d", game_is_equipped(id) ? "E " : "", game_item_count(id));
-      row.right = right;
+      gfx_draw_row(ctx, cell, &row);
+      return;
     }
   }
+  const BaseDef *b = game_item_base(it);
+  row.icon = b->icon;
+  row.title = b->name;
+  gfx_item_stat_text(it, sub, sizeof(sub));
+  row.sub = sub;
   gfx_draw_row(ctx, cell, &row);
 }
 
 static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
   if (index->section == 0) return;
-  if (!game_can_change_gear()) {
+  bool ok;
+  if (index->section == 1) {
+    ok = game_unequip(index->row);
+  } else {
+    ok = game_equip_from_bag(index->row);
+  }
+  if (!ok) {
     vibes_short_pulse();
     return;
-  }
-  if (index->section == 1) {
-    game_unequip((ItemType)index->row);
-  } else {
-    int id = game_owned_nth(index->row);
-    if (id < 0 || g_items[id].type == ITEM_MATERIAL) return;
-    game_toggle_equip(id);
   }
   menu_layer_reload_data(s_menu);
 }

@@ -238,13 +238,18 @@ static void list_header_update_proc(Layer *layer, GContext *ctx) {
   gfx_text(ctx, s_speech, r, GTextAlignmentLeft, THEME_FG);
 }
 
+// 購入一覧: ポーション、帰還の巻物、装備（勇者のレベルに合わせた品）
+#define BUY_POTION 0
+#define BUY_PORTAL 1
+#define BUY_GEAR_FIRST 2
+
 static int sell_rows(void) {
-  int n = game_owned_kinds();
+  int n = game_bag_count();
   return n > 0 ? n : 1;
 }
 
 static uint16_t list_num_rows(MenuLayer *menu, uint16_t section, void *data) {
-  return s_mode == LIST_BUY ? ITEM_COUNT : sell_rows();
+  return s_mode == LIST_BUY ? BUY_GEAR_FIRST + SHOP_GEAR_COUNT : sell_rows();
 }
 
 static int16_t list_header_height(MenuLayer *menu, uint16_t section, void *data) {
@@ -266,44 +271,45 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
   static char right[8];
   RowSpec row = { .icon = -1 };
   if (s_mode == LIST_BUY) {
-    int id = index->row;
-    const ItemDef *it = &g_items[id];
-    row.icon = id;
-    row.title = it->name;
-    if (it->type == ITEM_MATERIAL) {
-      snprintf(sub, sizeof(sub), "%dG ITEM", it->price);
-    } else if (it->atk && it->def) {
-      snprintf(sub, sizeof(sub), "%dG A+%d D+%d", it->price, it->atk, it->def);
-    } else if (it->atk) {
-      snprintf(sub, sizeof(sub), "%dG ATK+%d", it->price, it->atk);
+    if (index->row == BUY_POTION) {
+      row.icon = 12;
+      row.title = "Potion";
+      snprintf(sub, sizeof(sub), "%dG Heal 50%%", POTION_PRICE);
+      snprintf(right, sizeof(right), "%d/%d", game_potions(), MAX_POTIONS);
+      row.warn_sub = game_gold() < POTION_PRICE;
+    } else if (index->row == BUY_PORTAL) {
+      row.icon = 15;
+      row.title = "Portal Scroll";
+      snprintf(sub, sizeof(sub), "%dG To town", PORTAL_PRICE);
+      snprintf(right, sizeof(right), "%d/%d", game_portals(), MAX_PORTALS);
+      row.warn_sub = game_gold() < PORTAL_PRICE;
     } else {
-      snprintf(sub, sizeof(sub), "%dG DEF+%d", it->price, it->def);
+      int i = index->row - BUY_GEAR_FIRST;
+      Item it = game_shop_gear(i);
+      const BaseDef *b = game_item_base(&it);
+      char stats[24];
+      gfx_item_stat_text(&it, stats, sizeof(stats));
+      int cost = game_shop_gear_cost(i);
+      row.icon = b->icon;
+      row.title = b->name;
+      snprintf(sub, sizeof(sub), "%dG %s", cost, stats);
+      row.warn_sub = game_gold() < cost;
+      right[0] = '\0';
     }
     row.sub = sub;
-    row.warn_sub = game_gold() < it->price;
-    if (game_item_count(id) > 0) {
-      snprintf(right, sizeof(right), "x%d", game_item_count(id));
-      row.right = right;
-    }
+    if (right[0]) row.right = right;
   } else {
-    int id = game_owned_nth(index->row);
-    if (id < 0) {
+    const Item *it = game_bag(index->row);
+    if (!it) {
       row.title = "Nothing to sell";
-      row.sub = "Go find some loot!";
+      row.sub = "Go find loot!";
       row.dim = true;
     } else {
-      row.icon = id;
-      row.title = g_items[id].name;
-      bool locked = game_is_equipped(id) && game_item_count(id) <= 1;
-      if (locked) {
-        snprintf(sub, sizeof(sub), "Equipped");
-      } else {
-        snprintf(sub, sizeof(sub), "Sell %dG", game_sell_price(id));
-      }
+      const BaseDef *b = game_item_base(it);
+      row.icon = b->icon;
+      row.title = b->name;
+      snprintf(sub, sizeof(sub), "Sell %dG", game_item_price(it));
       row.sub = sub;
-      row.dim = locked;
-      snprintf(right, sizeof(right), "x%d", game_item_count(id));
-      row.right = right;
     }
   }
   gfx_draw_row(ctx, cell, &row);
@@ -311,19 +317,18 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
 
 static void list_select(MenuLayer *menu, MenuIndex *index, void *data) {
   if (s_mode == LIST_BUY) {
-    switch (game_buy(index->row)) {
+    BuyResult r;
+    if (index->row == BUY_POTION) r = game_buy_potion();
+    else if (index->row == BUY_PORTAL) r = game_buy_portal();
+    else r = game_buy_gear(index->row - BUY_GEAR_FIRST);
+    switch (r) {
       case BUY_OK: s_speech = pick(THANKS, ARRAY_LEN(THANKS)); break;
       case BUY_NO_GOLD: s_speech = "Not enough gold, sweetie."; break;
-      case BUY_FULL: s_speech = "Your bag is full, dear."; break;
+      case BUY_FULL: s_speech = index->row < BUY_GEAR_FIRST ? "You can't carry more, dear." : "Your bag is full, dear."; break;
     }
   } else {
-    int id = game_owned_nth(index->row);
-    if (id < 0) return;
-    switch (game_sell(id)) {
-      case SELL_OK: s_speech = "Ooh, I'll take that~"; break;
-      case SELL_EQUIPPED: s_speech = "That's equipped, silly~"; break;
-      case SELL_NONE: break;
-    }
+    if (!game_sell_bag(index->row)) return;
+    s_speech = "Ooh, I'll take that~";
     int n = sell_rows();
     if (index->row >= n) {
       menu_layer_set_selected_index(menu, MenuIndex(0, n - 1), MenuRowAlignCenter, false);

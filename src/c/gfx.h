@@ -1,6 +1,7 @@
 #pragma once
 #include <pebble.h>
 #include "art_info.h"
+#include "game.h"
 
 // ============================================================
 // 共通の描画ヘルパー（ゲームボーイカラー風）
@@ -56,9 +57,12 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
 // アイテムアイコン（ICON_SIZE 四方）。使う画面で acquire / release すること
 void gfx_items_acquire(void);
 void gfx_items_release(void);
-void gfx_draw_item_icon(GContext *ctx, int item_id, int x, int y);
+void gfx_draw_item_icon(GContext *ctx, int icon, int x, int y);
+// アイテムのアイコン（Item から）と、性能の短い文字列（"ATK+12 HP+5"）
+void gfx_draw_item(GContext *ctx, const Item *it, int x, int y);
+void gfx_item_stat_text(const Item *it, char *buf, size_t size);
 
-// ダンジョンごとの敵画像（ENEMY_SIZE 四方 x 2フレーム）のリソースID
+// 敵画像（ENEMY_SIZE 四方 x 2フレーム）のリソースID。番号は背景の絵と同じ
 uint32_t gfx_enemy_resource(int dungeon);
 
 // 店主の顔の画像（共有）

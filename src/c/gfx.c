@@ -174,8 +174,10 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
   set_lut(lut, 'h', 'o');  // 髪
   set_lut(lut, 'e', 's');  // 肌
 
-  int armor = game_equipped(ITEM_ARMOR);
-  int ai = (armor >= 4 && armor <= 7) ? armor - 3 : 0;
+  // 体の防具のアイテムレベルで服の色を変える（なしは緑の服）
+  const Item *armor = game_equipped(SLOT_BODY);
+  int ai = 0;
+  if (armor) ai = armor->ilvl < 10 ? 1 : (armor->ilvl < 22 ? 2 : (armor->ilvl < 35 ? 3 : 4));
   set_lut(lut, '1', ARMOR_COLORS[ai][0]);
   set_lut(lut, '2', ARMOR_COLORS[ai][1]);
 
@@ -189,8 +191,10 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
   }
   gfx_draw_charmap(ctx, body, HERO_MAP_W, HERO_MAP_H, x, y, scale, flip, lut);
 
-  int weapon = game_equipped(ITEM_WEAPON);
-  if (weapon < 0 || weapon > 3) return;
+  // 武器もアイテムレベルで見た目を変える（錆びた剣 → 鉄 → 鋼 → 斧）
+  const Item *wpn = game_equipped(SLOT_WEAPON);
+  if (!wpn) return;
+  int weapon = wpn->ilvl < 5 ? 0 : (wpn->ilvl < 18 ? 1 : (wpn->ilvl < 35 ? 2 : 3));
   set_lut(lut, '4', WEAPON_COLORS[weapon][0]);
   set_lut(lut, '5', WEAPON_COLORS[weapon][1]);
   set_lut(lut, '6', WEAPON_COLORS[weapon][2]);
@@ -236,11 +240,26 @@ void gfx_items_release(void) {
 }
 
 void gfx_draw_item_icon(GContext *ctx, int item_id, int x, int y) {
-  if (!s_item_sub || item_id < 0 || item_id >= ITEM_COUNT) return;
+  if (!s_item_sub || item_id < 0 || item_id >= 16) return;
   gbitmap_set_bounds(s_item_sub, GRect((item_id % 4) * ICON_SIZE, (item_id / 4) * ICON_SIZE,
                                        ICON_SIZE, ICON_SIZE));
   graphics_context_set_compositing_mode(ctx, GCompOpSet);
   graphics_draw_bitmap_in_rect(ctx, s_item_sub, GRect(x, y, ICON_SIZE, ICON_SIZE));
+}
+
+void gfx_draw_item(GContext *ctx, const Item *it, int x, int y) {
+  const BaseDef *b = game_item_base(it);
+  if (b) gfx_draw_item_icon(ctx, b->icon, x, y);
+}
+
+void gfx_item_stat_text(const Item *it, char *buf, size_t size) {
+  ItemStats s = game_item_stats(it);
+  int n = 0;
+  buf[0] = '\0';
+  if (s.atk) n += snprintf(buf + n, size - n, "ATK+%d ", s.atk);
+  if (s.def && n < (int)size) n += snprintf(buf + n, size - n, "DEF+%d ", s.def);
+  if (s.hp && n < (int)size) n += snprintf(buf + n, size - n, "HP+%d ", s.hp);
+  if (n > 0 && n <= (int)size) buf[n - 1] = '\0';   // 末尾の空白を消す
 }
 
 uint32_t gfx_enemy_resource(int dungeon) {

@@ -3,90 +3,188 @@
 
 // ============================================================
 // ゲームデータとロジック（画面から独立した部分）
+//   ・ダンジョンの進行は実際の歩数に連動する（steps.c）
+//   ・出来事は番号で記録し、表示するときに文章にする（game_log_text）
 // ============================================================
-#define ITEM_COUNT 16
-#define DUNGEON_COUNT 6
-#define BASE_POWER 5
-#define NO_ITEM (-1)
 
+#define DUNGEON_COUNT 8
+#define EQUIP_SLOTS 9
+#define BAG_SIZE 24
+#define LOG_SIZE 24
+#define LOG_IMPORTANT_MAX 12   // 重要な出来事はこの件数まで、普通の出来事に押し出されない
+#define LOG_SUMMARY_MIN 6      // 1回の更新でこれより多く起きたら、まとめのログを出す
+#define MAX_LEVEL 50
+#define MAX_POTIONS 5
+#define MAX_PORTALS 9
+#define DROP_EXPIRE_SEC (72 * 60 * 60)   // 死亡時に残した物が消えるまで
+#define POTION_PRICE 25
+#define PORTAL_PRICE 60
+
+// ---- 装備枠 ----
 typedef enum {
-  ITEM_WEAPON = 0,
-  ITEM_ARMOR = 1,
-  ITEM_ACCESSORY = 2,
-  ITEM_MATERIAL = 3,
-} ItemType;
+  SLOT_WEAPON, SLOT_OFFHAND, SLOT_HEAD, SLOT_BODY, SLOT_HANDS, SLOT_FEET,
+  SLOT_AMULET, SLOT_RING1, SLOT_RING2,
+} EquipSlot;
+
+// ---- アイテム（保存形式。1個8バイト） ----
+//   性能は base・seed・ilvl から毎回計算する（保存領域が小さいため）
+typedef struct {
+  uint16_t base;     // 基本アイテムの番号 + 1（0 は空）
+  uint16_t seed;
+  uint8_t ilvl;      // アイテムレベル
+  uint8_t rarity;    // フェーズ2で使う
+  uint8_t flags;     // フェーズ2で使う（鑑定済みなど）
+  uint8_t plus;      // 強化段階（フェーズ2で使う）
+} Item;
 
 typedef struct {
   const char *name;
-  ItemType type;
+  uint8_t slot;      // EquipSlot（指輪は SLOT_RING1）
+  uint8_t icon;      // items.png の番号
+} BaseDef;
+
+typedef struct {
   int16_t atk;
   int16_t def;
-  int16_t price;
-} ItemDef;
+  int16_t hp;
+} ItemStats;
 
 typedef struct {
   const char *name;
-  int16_t required_power;
-  int16_t clear_time_sec;
-  int16_t gold_min;
-  int16_t gold_max;
-  uint8_t loot_ids[4]; // 255 = 空
+  uint8_t floors;
+  uint16_t steps_per_floor;
+  uint8_t lvl_min, lvl_max;   // 敵のレベル（1階 → 最深部）
+  uint8_t art;                // 背景画像の番号
+  const char *monsters[4];    // 3種 + ボス
 } DungeonDef;
 
+extern const DungeonDef g_dungeons[DUNGEON_COUNT];
+extern const BaseDef g_bases[];
+extern const int g_base_count;
+extern const char *const g_slot_names[EQUIP_SLOTS];
+
+// ---- 冒険の状態 ----
 typedef enum {
-  LOC_TOWN = 0,     // 町で待機中
-  LOC_DUNGEON = 1,  // ダンジョン探索中
-} Location;
+  RUN_NONE = 0,     // 町にいる
+  RUN_EXPLORE = 1,  // 奥へ進んでいる
+  RUN_RETURN = 2,   // 歩いて町へ戻っている
+} RunMode;
+
+// ---- ログ ----
+typedef enum {
+  LOG_NONE,
+  LOG_WELCOME,
+  LOG_DEPART,       // a=ダンジョン
+  LOG_FLOOR,        // a=階
+  LOG_BATTLE,       // a=敵 b=受けたダメージ c=経験値 d=ゴールド
+  LOG_BOSS,         // a=敵 b=受けたダメージ c=経験値 d=ゴールド
+  LOG_ITEM,         // b=基本アイテム
+  LOG_BAG_FULL,     // b=基本アイテム
+  LOG_GOLD,         // b=量
+  LOG_TRAP,         // b=ダメージ
+  LOG_FOUNTAIN,     // b=回復量
+  LOG_POTION,       // b=回復量
+  LOG_LEVEL,        // a=レベル
+  LOG_LOW_HP,       // 自動帰還の開始（巻物なし）
+  LOG_PORTAL,       // 帰還の巻物を使った
+  LOG_WALK_BACK,    // 自分で歩いて帰ることにした
+  LOG_BOTTOM,       // 最深部を制覇して帰り始めた
+  LOG_TOWN,         // 町に着いた
+  LOG_DEATH,        // a=ダンジョン b=階
+  LOG_RECOVER,      // b=回収した数 c=残った数
+  LOG_DROP_GONE,    // 残した物が消えた
+  LOG_AGENT,        // b=回収した数（代行業者）
+  LOG_NO_STEPS,     // 歩数が取れない
+  LOG_SUMMARY,      // まとめ a=レベル b=戦闘 c=ゴールド d=アイテム
+} LogType;
+
+// ログの見た目の種類（画面で色を変える）
+typedef enum {
+  LOG_STYLE_DUNGEON,  // ダンジョンでの出来事
+  LOG_STYLE_TOWN,     // 町での出来事
+  LOG_STYLE_GREAT,    // ボス撃破・レベルアップ・回収など
+  LOG_STYLE_DANGER,   // 死亡・消失・HP低下
+  LOG_STYLE_SUMMARY,  // まとめ
+} LogStyle;
 
 typedef struct {
-  bool success;
-  int gold;
-  int item_id;      // NO_ITEM = なし
-  uint8_t dungeon;
-} RunResult;
-
-typedef enum { BUY_OK, BUY_NO_GOLD, BUY_FULL } BuyResult;
-typedef enum { SELL_OK, SELL_NONE, SELL_EQUIPPED } SellResult;
-
-extern const ItemDef g_items[ITEM_COUNT];
-extern const DungeonDef g_dungeons[DUNGEON_COUNT];
+  uint8_t type;
+  uint8_t a;
+  uint16_t b;
+  uint16_t c;
+  uint16_t d;
+} LogEntry;
 
 void game_init(void);
 void game_save(void);
 
-// ---- 冒険の状態 ----
-Location game_location(void);
-int game_current_dungeon(void);
-int game_progress_ms(void);
-int game_clear_ms(void);
-// 探索を進める。1回の探索が終わって町に戻ったら true を返し、結果を out に入れる。
-bool game_update(RunResult *out);
-bool game_dungeon_unlocked(int idx);
-bool game_depart(int idx);
-void game_retreat(void);
+// 歩数を確認して冒険を進める。何か起きたら true
+bool game_update(void);
 
-// ---- 勇者のステータス ----
+// ---- 勇者 ----
+int game_level(void);
+int32_t game_xp(void);
+int32_t game_xp_next(void);
+int32_t game_gold(void);
+int game_hp(void);
+int game_max_hp(void);
 int game_atk(void);
 int game_def(void);
-int game_power(void);
-int32_t game_gold(void);
-int game_runs(void);
-int game_wins(void);
+int game_potions(void);
+int game_portals(void);
 
-// ---- 装備・所持品 ----
-int game_item_count(int id);
-int game_equipped(ItemType slot);
-bool game_is_equipped(int id);
+// ---- 冒険 ----
+RunMode game_run_mode(void);
+int game_run_dungeon(void);
+int game_floor(void);              // 今いる階（1〜）
+int game_steps_to_next_floor(void);
+int game_return_left(void);
+bool game_dungeon_unlocked(int idx);
+bool game_dungeon_cleared(int idx);
+bool game_depart(int idx);
+bool game_use_portal(void);
+void game_walk_back(void);
+bool game_steps_available(void);
+
+// ---- 設定 ----
+int game_auto_return_pct(void);    // 0 = しない
+void game_cycle_auto_return(void);
+bool game_vibrate(void);
+void game_toggle_vibrate(void);
+
+// ---- アイテム ----
+ItemStats game_item_stats(const Item *it);
+const BaseDef *game_item_base(const Item *it);
+int game_item_price(const Item *it);        // 売値
+const Item *game_equipped(int slot);
+const Item *game_bag(int i);
+int game_bag_count(void);
 bool game_can_change_gear(void);
-void game_toggle_equip(int id);
-void game_unequip(ItemType slot);
-int game_owned_kinds(void);
-int game_owned_nth(int n);   // 所持しているアイテムの n 番目の ID
+bool game_equip_from_bag(int bag_index);
+bool game_unequip(int slot);
+bool game_sell_bag(int bag_index);
 
 // ---- お店 ----
-BuyResult game_buy(int id);
-SellResult game_sell(int id);
-int game_sell_price(int id);
+#define SHOP_GEAR_COUNT 8
+Item game_shop_gear(int i);                 // 今の在庫（勇者のレベルに合わせる）
+int game_shop_gear_cost(int i);
+typedef enum { BUY_OK, BUY_NO_GOLD, BUY_FULL } BuyResult;
+BuyResult game_buy_gear(int i);
+BuyResult game_buy_potion(void);
+BuyResult game_buy_portal(void);
 
-// ---- メッセージ（町・ダンジョン画面の下部に出す一言） ----
-const char *game_log(void);
+// ---- 死亡時に残した物 ----
+bool game_drop_exists(void);
+int game_drop_dungeon(void);
+int game_drop_floor(void);
+int game_drop_item_count(void);
+int32_t game_drop_seconds_left(void);
+int32_t game_drop_fee(void);
+typedef enum { AGENT_OK, AGENT_NO_GOLD, AGENT_NO_ROOM, AGENT_NONE } AgentResult;
+AgentResult game_hire_agent(void);
+
+// ---- ログ ----
+int game_log_count(void);
+// 新しい順に i 番目のログを文章にする
+void game_log_text(int i, char *buf, size_t size);
+LogStyle game_log_style(int i);

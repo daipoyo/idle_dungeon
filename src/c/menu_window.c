@@ -3,35 +3,42 @@
 #include "gfx.h"
 
 // ============================================================
-// メニュー（町にいるときとダンジョン探索中で項目が変わる）
+// メニュー（町にいるときとダンジョンにいるときで項目が変わる）
 // ============================================================
 typedef enum {
-  CMD_EXPLORE,
   CMD_DUNGEONS,
   CMD_SHOP,
   CMD_STATUS,
-  CMD_RETREAT,
+  CMD_AGENT,
+  CMD_SETTINGS,
+  CMD_PORTAL,
+  CMD_WALK_BACK,
 } Command;
+
+#define MAX_COMMANDS 6
 
 static Window *s_window;
 static MenuLayer *s_menu;
 
 static int build_commands(Command *out) {
   int n = 0;
-  if (game_location() == LOC_TOWN) {
-    out[n++] = CMD_EXPLORE;
+  if (game_run_mode() == RUN_NONE) {
     out[n++] = CMD_DUNGEONS;
     out[n++] = CMD_SHOP;
     out[n++] = CMD_STATUS;
+    if (game_drop_exists()) out[n++] = CMD_AGENT;
+    out[n++] = CMD_SETTINGS;
   } else {
+    out[n++] = CMD_PORTAL;
+    if (game_run_mode() == RUN_EXPLORE) out[n++] = CMD_WALK_BACK;
     out[n++] = CMD_STATUS;
-    out[n++] = CMD_RETREAT;
+    out[n++] = CMD_SETTINGS;
   }
   return n;
 }
 
 static uint16_t get_num_rows(MenuLayer *menu, uint16_t section, void *data) {
-  Command cmds[5];
+  Command cmds[MAX_COMMANDS];
   return build_commands(cmds);
 }
 
@@ -40,22 +47,16 @@ static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
 }
 
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *data) {
-  Command cmds[5];
+  Command cmds[MAX_COMMANDS];
   int n = build_commands(cmds);
   if (index->row >= n) return;
   static char sub[32];
   RowSpec row = { .icon = -1 };
   switch (cmds[index->row]) {
-    case CMD_EXPLORE:
-      row.icon = 1;
-      row.title = "Explore";
-      snprintf(sub, sizeof(sub), "%s", g_dungeons[game_current_dungeon()].name);
-      row.sub = sub;
-      break;
     case CMD_DUNGEONS:
       row.icon = 14;
       row.title = "Dungeons";
-      row.sub = "Pick a place";
+      row.sub = "Go exploring";
       break;
     case CMD_SHOP:
       row.icon = 8;
@@ -65,26 +66,41 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     case CMD_STATUS:
       row.icon = 5;
       row.title = "Status";
-      row.sub = game_can_change_gear() ? "Stats & gear" : "View stats";
+      row.sub = game_can_change_gear() ? "Gear & bag" : "View only";
       break;
-    case CMD_RETREAT:
+    case CMD_AGENT:
+      row.icon = 11;
+      row.title = "Lost Gear";
+      snprintf(sub, sizeof(sub), "%ldh left", (long)(game_drop_seconds_left() / 3600));
+      row.sub = sub;
+      row.warn_sub = true;
+      break;
+    case CMD_SETTINGS:
+      row.icon = 10;
+      row.title = "Settings";
+      row.sub = "Auto return";
+      break;
+    case CMD_PORTAL:
+      row.icon = 15;
+      row.title = "Portal";
+      snprintf(sub, sizeof(sub), "Scrolls x%d", game_portals());
+      row.sub = sub;
+      row.dim = game_portals() == 0;
+      break;
+    case CMD_WALK_BACK:
       row.icon = 12;
-      row.title = "Retreat";
-      row.sub = "Back, no loot";
+      row.title = "Walk Back";
+      row.sub = "Head to town";
       break;
   }
   gfx_draw_row(ctx, cell, &row);
 }
 
 static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
-  Command cmds[5];
+  Command cmds[MAX_COMMANDS];
   int n = build_commands(cmds);
   if (index->row >= n) return;
   switch (cmds[index->row]) {
-    case CMD_EXPLORE:
-      game_depart(game_current_dungeon());
-      ui_back_to_scene();
-      break;
     case CMD_DUNGEONS:
       dungeon_window_push();
       break;
@@ -94,8 +110,21 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
     case CMD_STATUS:
       status_window_push();
       break;
-    case CMD_RETREAT:
-      game_retreat();
+    case CMD_AGENT:
+      agent_window_push();
+      break;
+    case CMD_SETTINGS:
+      settings_window_push();
+      break;
+    case CMD_PORTAL:
+      if (game_use_portal()) {
+        ui_back_to_scene();
+      } else {
+        vibes_short_pulse();
+      }
+      break;
+    case CMD_WALK_BACK:
+      game_walk_back();
       ui_back_to_scene();
       break;
   }

@@ -4,59 +4,40 @@
 
 // ============================================================
 // メイン画面
-//   ・探索中  : ダンジョンを横スクロールで進み、ときどき敵と戦う
-//   ・探索終了: 宝箱（成功）または撤退（失敗）の演出のあと町へ
-//   ・町      : 町の背景の前で勇者が待機
+//   上から: 場所と所持金 / 場所の絵 / HP と進み具合 / ログ
+//   ・歩数は数秒ごとに確認し、冒険を進める
+//   ・UP/DOWN でログをさかのぼる、SELECT でメニュー
 // ============================================================
 
-#define KIND_TOWN 6
-
-// 歩く速さと、敵との遭遇サイクル（ms）
-#define WALK_SPEED 24          // px/秒
-#define CYCLE_MS 6000
-#define APPROACH_START 1600    // 敵が画面右から近づき始める
-#define FIGHT_START 3200       // 戦闘開始
-#define FIGHT_END 4700         // 戦闘終了（敵が消える）
-#define POOF_END 5200          // 煙が消えて再び歩き出す
-#define WALK_PER_CYCLE (FIGHT_START + (CYCLE_MS - POOF_END))
-#define RESULT_MS 2800         // 帰還演出の長さ
-#define FRAME_MS 150           // 探索中の描画間隔（約7fps）
-
-static const uint32_t BG_RES[DUNGEON_COUNT] = {
-  RESOURCE_ID_IMG_BG_DUNGEON0, RESOURCE_ID_IMG_BG_DUNGEON1, RESOURCE_ID_IMG_BG_DUNGEON2,
-  RESOURCE_ID_IMG_BG_DUNGEON3, RESOURCE_ID_IMG_BG_DUNGEON4, RESOURCE_ID_IMG_BG_DUNGEON5,
-};
-static const uint8_t BG_FILL[DUNGEON_COUNT] = {
-  BG_DUNGEON0_FILL, BG_DUNGEON1_FILL, BG_DUNGEON2_FILL,
-  BG_DUNGEON3_FILL, BG_DUNGEON4_FILL, BG_DUNGEON5_FILL,
-};
-// 空中に浮かぶ敵（クラゲ・目玉）は少し高い位置に描く
-static const int8_t ENEMY_LIFT[DUNGEON_COUNT] = { 0, 0, 0, 0, 4 * PX, 4 * PX };
+#define UPDATE_MS 5000
+#define KIND_TOWN DUNGEON_COUNT
 
 static Window *s_window;
 static Layer *s_canvas;
 static AppTimer *s_timer;
 static bool s_visible;
-static int64_t s_last_ms;
-static uint32_t s_anim_ms;
+static int s_scroll;             // ログを何件さかのぼっているか
 
-// 背景などの画像（表示中の場所のものだけ読み込む）
+// 表示中の場所の絵だけ読み込む
 static int s_art_kind = -1;
 static GBitmap *s_bg, *s_far, *s_ground;
-static GBitmap *s_enemy, *s_enemy_sub;
-static GBitmap *s_chest, *s_chest_sub;
 
-// 帰還演出
-static bool s_result_active;
-static int s_result_ms;
-static RunResult s_result;
-static bool s_items_held;
+static const uint32_t BG_RES[6] = {
+  RESOURCE_ID_IMG_BG_DUNGEON0, RESOURCE_ID_IMG_BG_DUNGEON1, RESOURCE_ID_IMG_BG_DUNGEON2,
+  RESOURCE_ID_IMG_BG_DUNGEON3, RESOURCE_ID_IMG_BG_DUNGEON4, RESOURCE_ID_IMG_BG_DUNGEON5,
+};
+static const uint8_t BG_FILL[6] = {
+  BG_DUNGEON0_FILL, BG_DUNGEON1_FILL, BG_DUNGEON2_FILL,
+  BG_DUNGEON3_FILL, BG_DUNGEON4_FILL, BG_DUNGEON5_FILL,
+};
 
 typedef struct {
   int w, h;
-  int top_h, bot_h;
-  int scene_top, scene_bot;
-  int ground_top;
+  int inset;                     // 丸型の左右の余白
+  int top_h;                     // 場所と所持金
+  int art_top, art_bot;          // 絵
+  int stat_top, stat_bot;        // HP と進み具合
+  int log_top;                   // ログ
 } Layout;
 
 static Layout make_layout(GRect b) {
@@ -64,23 +45,20 @@ static Layout make_layout(GRect b) {
   L.w = b.size.w;
   L.h = b.size.h;
 #if defined(PBL_ROUND)
-  L.top_h = SNAP(L.h * 16 / 100);
-  L.bot_h = SNAP(L.h * 30 / 100);
+  L.inset = SNAP(L.w / 7);
+  L.top_h = SNAP(L.h * 15 / 100);
+  L.art_top = L.top_h;
+  L.art_bot = SNAP(L.h * 42 / 100);
 #else
+  L.inset = 0;
   L.top_h = IS_LARGE_SCREEN ? 24 : 20;
-  L.bot_h = IS_LARGE_SCREEN ? 56 : 40;
+  L.art_top = L.top_h;
+  L.art_bot = L.art_top + (IS_LARGE_SCREEN ? 72 : 48);
 #endif
-  L.scene_top = L.top_h;
-  L.scene_bot = L.h - L.bot_h;
-  L.ground_top = L.scene_bot - BG_GROUND_H;
+  L.stat_top = L.art_bot;
+  L.stat_bot = L.stat_top + LINE_H * 2 + 2 * PX;
+  L.log_top = L.stat_bot;
   return L;
-}
-
-static int64_t now_ms(void) {
-  time_t t;
-  uint16_t ms;
-  time_ms(&t, &ms);
-  return (int64_t)t * 1000 + ms;
 }
 
 // ============================================================
@@ -97,10 +75,6 @@ static void unload_art(void) {
   destroy_bmp(&s_far);
   destroy_bmp(&s_ground);
   destroy_bmp(&s_bg);
-  destroy_bmp(&s_enemy_sub);
-  destroy_bmp(&s_enemy);
-  destroy_bmp(&s_chest_sub);
-  destroy_bmp(&s_chest);
   s_art_kind = -1;
 }
 
@@ -112,176 +86,42 @@ static void ensure_art(int kind) {
     s_bg = gbitmap_create_with_resource(RESOURCE_ID_IMG_BG_TOWN);
     return;
   }
-  s_bg = gbitmap_create_with_resource(BG_RES[kind]);
+  s_bg = gbitmap_create_with_resource(BG_RES[g_dungeons[kind].art]);
   s_far = gbitmap_create_as_sub_bitmap(s_bg, GRect(0, 0, BG_TILE_W, BG_FAR_H));
   s_ground = gbitmap_create_as_sub_bitmap(s_bg, GRect(0, BG_FAR_H, BG_TILE_W, BG_GROUND_H));
-  s_enemy = gbitmap_create_with_resource(gfx_enemy_resource(kind));
-  s_enemy_sub = gbitmap_create_as_sub_bitmap(s_enemy, GRect(0, 0, ENEMY_SIZE, ENEMY_SIZE));
-  s_chest = gbitmap_create_with_resource(RESOURCE_ID_IMG_CHEST);
-  s_chest_sub = gbitmap_create_as_sub_bitmap(s_chest, GRect(0, 0, ICON_SIZE, ICON_SIZE));
-}
-
-static void hold_items(bool hold) {
-  if (hold && !s_items_held) gfx_items_acquire();
-  if (!hold && s_items_held) gfx_items_release();
-  s_items_held = hold;
-}
-
-// ============================================================
-// 探索の進み具合 → 歩いた距離・敵の状態
-// ============================================================
-static int enemy_cycles(int clear_ms) {
-  int n = (clear_ms - 1000) / CYCLE_MS;
-  return n < 0 ? 0 : n;
-}
-
-// 探索開始から p ms 経過した時点で、歩いていた時間の合計
-static int walked_ms(int p, int clear_ms) {
-  int n = enemy_cycles(clear_ms);
-  int cyc = p / CYCLE_MS;
-  int t = p % CYCLE_MS;
-  int full_enemy = cyc < n ? cyc : n;
-  int total = full_enemy * WALK_PER_CYCLE + (cyc - full_enemy) * CYCLE_MS;
-  if (cyc < n) {
-    if (t < FIGHT_START) total += t;
-    else if (t < POOF_END) total += FIGHT_START;
-    else total += FIGHT_START + (t - POOF_END);
-  } else {
-    total += t;
-  }
-  return total;
 }
 
 // ============================================================
 // 描画
 // ============================================================
-static void draw_enemy(GContext *ctx, int frame, int x, int y) {
-  if (!s_enemy_sub) return;
-  gbitmap_set_bounds(s_enemy_sub, GRect(frame ? ENEMY_SIZE : 0, 0, ENEMY_SIZE, ENEMY_SIZE));
-  graphics_context_set_compositing_mode(ctx, GCompOpSet);
-  graphics_draw_bitmap_in_rect(ctx, s_enemy_sub, GRect(SNAP(x), SNAP(y), ENEMY_SIZE, ENEMY_SIZE));
-}
-
-static void draw_chest(GContext *ctx, bool open, int x, int y) {
-  if (!s_chest_sub) return;
-  gbitmap_set_bounds(s_chest_sub, GRect(open ? ICON_SIZE : 0, 0, ICON_SIZE, ICON_SIZE));
-  graphics_context_set_compositing_mode(ctx, GCompOpSet);
-  graphics_draw_bitmap_in_rect(ctx, s_chest_sub, GRect(SNAP(x), SNAP(y), ICON_SIZE, ICON_SIZE));
-}
-
-static void draw_banner(GContext *ctx, const Layout *L, const char *text, GColor color) {
-  int inset = PBL_IF_ROUND_ELSE(L->w / 8, 4);
-  gfx_text_outlined(ctx, text, GRect(inset, L->scene_top + 4 * PX, L->w - inset * 2, LINE_H * 2),
-                    GTextAlignmentCenter, color, GColorBlack);
-}
-
-static void draw_dungeon_scene(GContext *ctx, const Layout *L, int dungeon, int p) {
-  ensure_art(dungeon);
-  int clear_ms = g_dungeons[dungeon].clear_time_sec * 1000;
-
-  // 背景（遠景は地面の半分の速さでスクロール＝奥行き）
-  graphics_context_set_fill_color(ctx, gfx_argb(BG_FILL[dungeon]));
-  graphics_fill_rect(ctx, GRect(0, L->scene_top, L->w, L->scene_bot - L->scene_top), 0, GCornerNone);
-  int scroll = s_result_active ? walked_ms(clear_ms, clear_ms) : walked_ms(p, clear_ms);
-  scroll = scroll * WALK_SPEED / 1000;
-  // ドット単位でスクロールさせる（半ドットずれると絵がにじんで見える）
-  int far_off = SNAP(scroll / 2) % BG_TILE_W;
-  int ground_off = SNAP(scroll) % BG_TILE_W;
-  int far_top = L->ground_top - BG_FAR_H;
+static void draw_art(GContext *ctx, const Layout *L) {
+  RunMode mode = game_run_mode();
+  GRect area = GRect(0, L->art_top, L->w, L->art_bot - L->art_top);
   graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-  graphics_draw_bitmap_in_rect(ctx, s_far, GRect(-far_off, far_top, L->w + far_off, BG_FAR_H));
-  graphics_draw_bitmap_in_rect(ctx, s_ground, GRect(-ground_off, L->ground_top, L->w + ground_off, BG_GROUND_H));
-
-  int hero_x = SNAP(L->w * 3 / 10 - HERO_W / 2);
-  int foot_y = L->ground_top + 2 * PX;
-  int hero_y = foot_y - HERO_H;
-  int enemy_y = foot_y - ENEMY_SIZE - ENEMY_LIFT[dungeon];
-  int contact_x = hero_x + HERO_W + 3 * PX;
-
-  // ---- 帰還演出 ----
-  if (s_result_active) {
-    int t = s_result_ms;
-    static char buf[24];
-    if (s_result.success) {
-      int chest_x = hero_x + HERO_W + 4 * PX;
-      int chest_y = foot_y - ICON_SIZE + PX;
-      bool open = t >= 600;
-      draw_chest(ctx, open, chest_x, chest_y);
-      gfx_draw_hero(ctx, hero_x, hero_y, HERO_POSE_IDLE, PX, false);
-      if (open) {
-        int rise = SNAP((t - 600) / 30);
-        if (rise > 8 * PX) rise = 8 * PX;
-        if (s_result.item_id >= 0) {
-          gfx_draw_item_icon(ctx, s_result.item_id, chest_x, chest_y - 3 * PX - rise);
-        }
-        snprintf(buf, sizeof(buf), "+%dG", s_result.gold);
-        int tw = gfx_text_width(buf);
-        gfx_text_outlined(ctx, buf, GRect(SNAP(chest_x + ICON_SIZE / 2 - tw / 2), chest_y - 10 * PX - rise,
-                                          tw + PX, LINE_H),
-                          GTextAlignmentLeft, THEME_GOLD, GColorBlack);
-      }
-      draw_banner(ctx, L, "CLEAR!", THEME_GOLD);
-    } else {
-      if (t < 800) {
-        if ((t / 100) % 2 == 0) gfx_draw_hero(ctx, hero_x, hero_y, HERO_POSE_IDLE, PX, false);
-        draw_enemy(ctx, (t / 300) % 2, contact_x, enemy_y);
-      } else {
-        int run_x = SNAP(hero_x - (t - 800) * 60 / 1000);
-        HeroPose pose = ((t / 150) % 2) ? HERO_POSE_WALK0 : HERO_POSE_WALK1;
-        gfx_draw_hero(ctx, run_x, hero_y, pose, PX, true);
-        draw_enemy(ctx, (t / 300) % 2, contact_x, enemy_y);
-      }
-      draw_banner(ctx, L, "RETREAT...", THEME_WARN);
-    }
-    return;
+  int hero_x;
+  int foot_y = L->art_bot - PX;
+  if (mode == RUN_NONE) {
+    ensure_art(KIND_TOWN);
+    graphics_context_set_fill_color(ctx, gfx_argb(BG_TOWN_FILL));
+    graphics_fill_rect(ctx, area, 0, GCornerNone);
+    graphics_draw_bitmap_in_rect(ctx, s_bg, GRect(SNAP((L->w - BG_TOWN_W) / 2), L->art_bot - BG_TOWN_H,
+                                                   BG_TOWN_W, BG_TOWN_H));
+    hero_x = SNAP(L->w / 2 - 40);
+  } else {
+    int d = game_run_dungeon();
+    ensure_art(d);
+    graphics_context_set_fill_color(ctx, gfx_argb(BG_FILL[g_dungeons[d].art]));
+    graphics_fill_rect(ctx, area, 0, GCornerNone);
+    int ground_top = L->art_bot - BG_GROUND_H;
+    graphics_draw_bitmap_in_rect(ctx, s_far, GRect(0, ground_top - BG_FAR_H, L->w, BG_FAR_H));
+    graphics_draw_bitmap_in_rect(ctx, s_ground, GRect(0, ground_top, L->w, BG_GROUND_H));
+    hero_x = SNAP(L->w * 3 / 10);
   }
-
-  // ---- 探索中 ----
-  int cyc = p / CYCLE_MS;
-  int t = p % CYCLE_MS;
-  bool enemy_cycle = cyc < enemy_cycles(clear_ms);
-  HeroPose pose = ((p / 200) % 2) ? HERO_POSE_WALK0 : HERO_POSE_WALK1;
-
-  if (enemy_cycle && t >= APPROACH_START && t < FIGHT_START) {
-    int start_x = L->w + 4;
-    int ex = start_x - (start_x - contact_x) * (t - APPROACH_START) / (FIGHT_START - APPROACH_START);
-    draw_enemy(ctx, (t / 300) % 2, ex, enemy_y);
-  } else if (enemy_cycle && t >= FIGHT_START && t < FIGHT_END) {
-    int ft = t - FIGHT_START;
-    bool swing = (ft / 250) % 2 == 0;
-    pose = swing ? HERO_POSE_ATTACK : HERO_POSE_IDLE;
-    int knock = swing ? 2 * PX : 0;
-    // 最後の一撃の前後は点滅
-    if (ft < FIGHT_END - FIGHT_START - 300 || (ft / 60) % 2 == 0) {
-      draw_enemy(ctx, (t / 300) % 2, contact_x + knock, enemy_y);
-    }
-    if (swing) gfx_draw_spark(ctx, contact_x + 2 * PX, foot_y - ENEMY_SIZE / 2);
-  } else if (enemy_cycle && t >= FIGHT_END && t < POOF_END) {
-    pose = HERO_POSE_IDLE;
-    gfx_draw_poof(ctx, contact_x + ENEMY_SIZE / 2, foot_y - ENEMY_SIZE / 2, (t - FIGHT_END) >= 250);
-  }
-  gfx_draw_hero(ctx, hero_x, hero_y, pose, PX, false);
-
-  if (p < 1800) {
-    draw_banner(ctx, L, g_dungeons[dungeon].name, GColorWhite);
-  }
+  // 帰り道では町の方（左）を向く
+  gfx_draw_hero(ctx, hero_x, foot_y - HERO_H + 2 * PX, HERO_POSE_IDLE, PX, mode == RUN_RETURN);
 }
 
-static void draw_town_scene(GContext *ctx, const Layout *L) {
-  ensure_art(KIND_TOWN);
-  graphics_context_set_fill_color(ctx, gfx_argb(BG_TOWN_FILL));
-  graphics_fill_rect(ctx, GRect(0, L->scene_top, L->w, L->scene_bot - L->scene_top), 0, GCornerNone);
-  graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-  graphics_draw_bitmap_in_rect(ctx, s_bg, GRect(SNAP((L->w - BG_TOWN_W) / 2), L->scene_bot - BG_TOWN_H,
-                                                 BG_TOWN_W, BG_TOWN_H));
-  // お店の前でひと休み（ゆっくり呼吸）
-  int bob = ((s_anim_ms / 700) % 2) * PX;
-  int hero_x = SNAP(L->w / 2 - 40);
-  int hero_y = L->ground_top + 2 * PX - HERO_H + bob;
-  gfx_draw_hero(ctx, hero_x, hero_y, HERO_POSE_IDLE, PX, false);
-}
-
-static void draw_top_bar(GContext *ctx, const Layout *L, const char *place) {
+static void draw_top_bar(GContext *ctx, const Layout *L) {
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, GRect(0, 0, L->w, L->top_h), 0, GCornerNone);
 
@@ -290,10 +130,9 @@ static void draw_top_bar(GContext *ctx, const Layout *L, const char *place) {
   int ty = L->top_h - TEXT_H - 2 * PX;
   int gw = gfx_text_width(gold);
 #if defined(PBL_ROUND)
-  // 丸型：上端は狭いので所持金だけ中央に
   int gx = SNAP((L->w - gw + 6 * PX) / 2);
-  (void)place;
 #else
+  const char *place = game_run_mode() == RUN_NONE ? "Town" : g_dungeons[game_run_dungeon()].name;
   gfx_text(ctx, place, GRect(2 * PX, ty, L->w - gw - 14 * PX, LINE_H), GTextAlignmentLeft, THEME_FG);
   int gx = L->w - 2 * PX - gw;
 #endif
@@ -301,127 +140,166 @@ static void draw_top_bar(GContext *ctx, const Layout *L, const char *place) {
   gfx_text(ctx, gold, GRect(gx, ty, gw + PX, LINE_H), GTextAlignmentLeft, THEME_GOLD);
 }
 
-static void draw_bottom_panel(GContext *ctx, const Layout *L, bool exploring, int p, int clear_ms) {
-  int y0 = L->scene_bot;
-  GRect panel = GRect(0, y0, L->w, L->bot_h);
+// HP バーと、進み具合（町ではレベルと持ち物）
+static void draw_status(GContext *ctx, const Layout *L) {
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, GRect(0, L->stat_top, L->w, L->stat_bot - L->stat_top), 0, GCornerNone);
+  int x = L->inset + 2 * PX;
+  int w = L->w - L->inset * 2 - 4 * PX;
+  int y = L->stat_top + PX;
+  static char buf[32];
+
+  // 1行目: HP の数値とバー
+  int hp = game_hp(), max = game_max_hp();
+  snprintf(buf, sizeof(buf), "HP %d/%d", hp, max);
+  int tw = gfx_text_width("HP 000/000") + 2 * PX;
+  gfx_text(ctx, buf, GRect(x, y, tw, LINE_H), GTextAlignmentLeft, THEME_FG);
+  int bar_x = x + tw;
+  int bar_w = SNAP(w - tw);
+  graphics_context_set_fill_color(ctx, THEME_DIM);
+  graphics_fill_rect(ctx, GRect(bar_x, y + PX, bar_w, 3 * PX), 0, GCornerNone);
+  int filled = max > 0 ? SNAP(bar_w * hp / max) : 0;
+  GColor hp_color = hp * 100 < max * 30 ? GColorRed : (hp * 100 < max * 60 ? GColorChromeYellow : GColorGreen);
+  graphics_context_set_fill_color(ctx, hp_color);
+  graphics_fill_rect(ctx, GRect(bar_x, y + PX, filled, 3 * PX), 0, GCornerNone);
+  y += LINE_H;
+
+  // 2行目
+  RunMode mode = game_run_mode();
+  if (mode == RUN_EXPLORE) {
+    const DungeonDef *d = &g_dungeons[game_run_dungeon()];
+    int next = game_steps_to_next_floor();
+    if (next > 0) snprintf(buf, sizeof(buf), "F%d/%d  NEXT %d", game_floor(), d->floors, next);
+    else snprintf(buf, sizeof(buf), "F%d/%d  BOSS", game_floor(), d->floors);
+  } else if (mode == RUN_RETURN) {
+    snprintf(buf, sizeof(buf), "F%d  BACK %d", game_floor(), game_return_left());
+  } else {
+    snprintf(buf, sizeof(buf), "LV%d  POT %d  TP %d", game_level(), game_potions(), game_portals());
+  }
+  gfx_text(ctx, buf, GRect(x, y, w, LINE_H), PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft),
+           mode == RUN_RETURN ? THEME_WARN : THEME_SUB);
+}
+
+// ログの色（最新の1件 / それより古いもの）
+//   ダンジョン: 水色   町: 白   ボス撃破・レベルアップ・回収: 緑
+//   死亡・消失・HP低下: 赤   まとめ: 黄
+static GColor log_color(LogStyle style, bool latest) {
+  switch (style) {
+    case LOG_STYLE_DUNGEON: return latest ? GColorCeleste : GColorCadetBlue;
+    case LOG_STYLE_GREAT: return latest ? GColorInchworm : GColorKellyGreen;
+    case LOG_STYLE_DANGER: return latest ? GColorMelon : GColorRoseVale;
+    case LOG_STYLE_SUMMARY: return latest ? GColorIcterine : GColorBrass;
+    default: return latest ? GColorWhite : GColorLightGray;
+  }
+}
+
+// ログ（新しい順）。s_scroll 件ぶんさかのぼって表示する
+//   各行の左に種類の色の縦線を引く
+static void draw_log(GContext *ctx, const Layout *L) {
 #if defined(PBL_ROUND)
-  // 丸型は枠の角が欠けるので、上に線を引くだけにする
+  GRect panel = GRect(0, L->log_top, L->w, L->h - L->log_top);
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, panel, 0, GCornerNone);
   graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_rect(ctx, GRect(0, y0 + PX, L->w, PX), 0, GCornerNone);
-  int inset = SNAP(L->w / 6);
-  GRect inner = GRect(inset, y0 + 3 * PX, L->w - inset * 2, L->bot_h - 3 * PX);
+  graphics_fill_rect(ctx, GRect(0, L->log_top, L->w, PX), 0, GCornerNone);
+  GRect inner = GRect(L->inset, L->log_top + 2 * PX, L->w - L->inset * 2, L->h - L->log_top - 2 * PX);
   GTextAlignment align = GTextAlignmentCenter;
 #else
+  GRect panel = GRect(0, L->log_top, L->w, L->h - L->log_top);
   gfx_draw_window(ctx, panel);
   GRect inner = gfx_window_inner(panel);
   GTextAlignment align = GTextAlignmentLeft;
 #endif
+  int count = game_log_count();
+  if (s_scroll >= count) s_scroll = count > 0 ? count - 1 : 0;
   int y = inner.origin.y;
-
-  if (exploring) {
-    // 探索の進行バーと残り時間
-    static char left[12];
-    int remain = (clear_ms - p + 999) / 1000;
-    snprintf(left, sizeof(left), "%ds", remain);
-    int left_w = gfx_text_width("000s");
-    int bar_x = inner.origin.x;
-    int bar_w = SNAP(inner.size.w - left_w - 2 * PX);
-    int bar_h = 3 * PX;
-    graphics_context_set_fill_color(ctx, THEME_DIM);
-    graphics_fill_rect(ctx, GRect(bar_x, y + PX, bar_w, bar_h), 0, GCornerNone);
-    int filled = (clear_ms > 0) ? SNAP(bar_w * p / clear_ms) : 0;
-    graphics_context_set_fill_color(ctx, THEME_GOLD);
-    graphics_fill_rect(ctx, GRect(bar_x, y + PX, filled, bar_h), 0, GCornerNone);
-    gfx_text(ctx, left, GRect(inner.origin.x + inner.size.w - left_w, y, left_w, LINE_H),
-             GTextAlignmentRight, THEME_FG);
-    y += LINE_H;
+  int bottom = inner.origin.y + inner.size.h;
+  char buf[64];
+  // 丸型は中央揃えなので縦線を引かず、色だけで区別する
+  int bar_w = PBL_IF_ROUND_ELSE(0, 3 * PX);
+  for (int i = s_scroll; i < count && y + LINE_H <= bottom; i++) {
+    game_log_text(i, buf, sizeof(buf));
+    GColor color = log_color(game_log_style(i), i == 0);
+    GRect box = GRect(inner.origin.x + bar_w, y, inner.size.w - bar_w, bottom - y);
+    int lines = gfx_text(ctx, buf, box, align, color);
+    if (bar_w) {
+      graphics_context_set_fill_color(ctx, color);
+      graphics_fill_rect(ctx, GRect(inner.origin.x, y, PX, lines * LINE_H - PX), 0, GCornerNone);
+    }
+    y += lines * LINE_H + PX;
   }
-
-  GRect box = GRect(inner.origin.x, y, inner.size.w, inner.origin.y + inner.size.h - y);
-  int lines = gfx_text(ctx, game_log(), box, align, THEME_FG);
-
-  if (!exploring && (lines + 1) * LINE_H <= box.size.h) {
-    gfx_text(ctx, "SELECT: MENU", GRect(box.origin.x, y + lines * LINE_H, box.size.w, LINE_H),
-             align, THEME_SUB);
+  // さかのぼっているときは右上に印
+  if (s_scroll > 0) {
+    static char mark[16];
+    snprintf(mark, sizeof(mark), "-%d", s_scroll);
+    int mw = gfx_text_width(mark);
+    gfx_text(ctx, mark, GRect(inner.origin.x + inner.size.w - mw, inner.origin.y, mw + PX, LINE_H),
+             GTextAlignmentLeft, THEME_GOLD);
   }
 }
 
 static void canvas_update_proc(Layer *layer, GContext *ctx) {
   Layout L = make_layout(layer_get_bounds(layer));
-  bool exploring = !s_result_active && game_location() == LOC_DUNGEON;
-  int p = game_progress_ms();
-
-  const char *place = "Town";
-  if (s_result_active) {
-    draw_dungeon_scene(ctx, &L, s_result.dungeon, p);
-    place = g_dungeons[s_result.dungeon].name;
-  } else if (exploring) {
-    draw_dungeon_scene(ctx, &L, game_current_dungeon(), p);
-    place = g_dungeons[game_current_dungeon()].name;
-  } else {
-    draw_town_scene(ctx, &L);
-  }
-  draw_top_bar(ctx, &L, place);
-  draw_bottom_panel(ctx, &L, exploring, p, game_clear_ms());
+  draw_art(ctx, &L);
+  draw_top_bar(ctx, &L);
+  draw_status(ctx, &L);
+  draw_log(ctx, &L);
 }
 
 // ============================================================
-// タイマー
+// 更新
 // ============================================================
 static void schedule_tick(void);
 
-static void tick(void *data) {
-  s_timer = NULL;
-  int64_t now = now_ms();
-  int dt = (int)(now - s_last_ms);
-  if (dt < 0) dt = 0;
-  if (dt > 1000) dt = 1000;
-  s_last_ms = now;
-  s_anim_ms += dt;
-
-  RunResult r;
-  if (game_update(&r)) {
-    if (s_visible) {
-      s_result = r;
-      s_result_active = true;
-      s_result_ms = 0;
-      hold_items(true);
-    }
+void scene_window_update(void) {
+  if (game_update()) {
+    s_scroll = 0;
     ui_state_changed();
   }
-  if (s_result_active) {
-    s_result_ms += dt;
-    if (s_result_ms >= RESULT_MS) {
-      s_result_active = false;
-      hold_items(false);
-    }
-  }
   if (s_visible && s_canvas) layer_mark_dirty(s_canvas);
+}
+
+static void tick(void *data) {
+  s_timer = NULL;
+  scene_window_update();
   schedule_tick();
 }
 
 static void schedule_tick(void) {
   if (s_timer) app_timer_cancel(s_timer);
-  int ms = 1000;
-  if (s_visible) {
-    ms = (s_result_active || game_location() == LOC_DUNGEON) ? FRAME_MS : 350;
-  }
-  s_timer = app_timer_register(ms, tick, NULL);
+  s_timer = s_visible ? app_timer_register(UPDATE_MS, tick, NULL) : NULL;
 }
 
 // ============================================================
-// ウィンドウ
+// ボタン
 // ============================================================
 static void select_click(ClickRecognizerRef recognizer, void *context) {
   menu_window_push();
 }
 
-static void click_config(void *context) {
-  window_single_click_subscribe(BUTTON_ID_SELECT, select_click);
+static void up_click(ClickRecognizerRef recognizer, void *context) {
+  if (s_scroll + 1 < game_log_count()) {
+    s_scroll++;
+    layer_mark_dirty(s_canvas);
+  }
 }
 
+static void down_click(ClickRecognizerRef recognizer, void *context) {
+  if (s_scroll > 0) {
+    s_scroll--;
+    layer_mark_dirty(s_canvas);
+  }
+}
+
+static void click_config(void *context) {
+  window_single_click_subscribe(BUTTON_ID_SELECT, select_click);
+  window_single_repeating_click_subscribe(BUTTON_ID_UP, 150, up_click);
+  window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 150, down_click);
+}
+
+// ============================================================
+// ウィンドウ
+// ============================================================
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   s_canvas = layer_create(layer_get_bounds(root));
@@ -436,16 +314,14 @@ static void window_unload(Window *window) {
 
 static void window_appear(Window *window) {
   s_visible = true;
-  s_last_ms = now_ms();
+  s_scroll = 0;
+  scene_window_update();
   schedule_tick();
-  layer_mark_dirty(s_canvas);
 }
 
 static void window_disappear(Window *window) {
   // 他の画面を開いている間は画像を解放してメモリを空ける
   s_visible = false;
-  s_result_active = false;
-  hold_items(false);
   unload_art();
   schedule_tick();
 }
@@ -469,7 +345,6 @@ void scene_window_destroy(void) {
     s_timer = NULL;
   }
   unload_art();
-  hold_items(false);
   window_destroy(s_window);
   s_window = NULL;
 }

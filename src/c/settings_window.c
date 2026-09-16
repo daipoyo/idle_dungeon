@@ -3,59 +3,50 @@
 #include "gfx.h"
 
 // ============================================================
-// ダンジョン選択（選ぶとそのまま出発）
-//   前のダンジョンのボスを倒すと次が開く
+// 設定
+//   ・自動帰還: HP が何%を切ったら帰るか（巻物があれば使い、なければ歩いて帰る）
+//   ・危険の振動: 自動帰還や死亡のときに振動する（電池の消費が増える）
 // ============================================================
 static Window *s_window;
 static MenuLayer *s_menu;
-static GBitmap *s_enemy[6];
-static GBitmap *s_enemy_sub[6];
 
 static uint16_t get_num_rows(MenuLayer *menu, uint16_t section, void *data) {
-  return DUNGEON_COUNT;
+  return 2;
 }
 
 static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
-  return ROW_H + 4;
+  return ROW_H;
 }
 
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *data) {
-  int i = index->row;
-  const DungeonDef *d = &g_dungeons[i];
-  bool unlocked = game_dungeon_unlocked(i);
-  static char sub[32];
-  if (unlocked) {
-    snprintf(sub, sizeof(sub), "%dF %d steps", d->floors, d->floors * d->steps_per_floor);
+  static char sub[24];
+  RowSpec row = { .icon = -1 };
+  if (index->row == 0) {
+    row.title = "Auto Return";
+    int pct = game_auto_return_pct();
+    if (pct) snprintf(sub, sizeof(sub), "Below %d%% HP", pct);
+    else snprintf(sub, sizeof(sub), "Off (risky!)");
+    row.warn_sub = pct == 0;
   } else {
-    snprintf(sub, sizeof(sub), "Beat %s", g_dungeons[i - 1].monsters[3]);
+    row.title = "Danger Vibe";
+    snprintf(sub, sizeof(sub), game_vibrate() ? "On: more battery" : "Off");
   }
-  RowSpec row = {
-    .icon = -1,
-    .bitmap = unlocked ? s_enemy_sub[d->art] : NULL,
-    .title = unlocked ? d->name : "???",
-    .sub = sub,
-    .right = game_dungeon_cleared(i) ? "*" : NULL,
-    .dim = !unlocked,
-    .warn_sub = !unlocked,
-  };
+  row.sub = sub;
   gfx_draw_row(ctx, cell, &row);
 }
 
 static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
-  if (!game_depart(index->row)) {
-    vibes_short_pulse();
-    return;
+  if (index->row == 0) {
+    game_cycle_auto_return();
+  } else {
+    game_toggle_vibrate();
+    if (game_vibrate()) vibes_short_pulse();
   }
-  ui_state_changed();
-  ui_back_to_scene();
+  menu_layer_reload_data(menu);
 }
 
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
-  for (int i = 0; i < 6; i++) {
-    s_enemy[i] = gbitmap_create_with_resource(gfx_enemy_resource(i));
-    s_enemy_sub[i] = gbitmap_create_as_sub_bitmap(s_enemy[i], GRect(0, 0, ENEMY_SIZE, ENEMY_SIZE));
-  }
   s_menu = menu_layer_create(layer_get_bounds(root));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows = get_num_rows,
@@ -70,17 +61,11 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
-  for (int i = 0; i < 6; i++) {
-    gbitmap_destroy(s_enemy_sub[i]);
-    gbitmap_destroy(s_enemy[i]);
-    s_enemy_sub[i] = NULL;
-    s_enemy[i] = NULL;
-  }
   window_destroy(window);
   s_window = NULL;
 }
 
-void dungeon_window_push(void) {
+void settings_window_push(void) {
   if (s_window) return;
   s_window = window_create();
   window_set_window_handlers(s_window, (WindowHandlers){
