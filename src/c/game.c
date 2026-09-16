@@ -16,6 +16,9 @@
 #define KEY_DROP 105
 #define KEY_DROP_EQUIP 106
 #define KEY_DROP_BAG 107
+#define KEY_STASH_A 108   // 保管庫の前半 24個（192バイト）
+#define KEY_STASH_B 109   // 保管庫の後半 24個
+#define KEY_CODEX 110     // 図鑑の既読ビット（128バイト）
 #define SAVE_VERSION 1
 
 // ============================================================
@@ -165,6 +168,8 @@ static Item s_drop_equip[EQUIP_SLOTS];
 static Item s_drop_bag[BAG_SIZE];
 static bool s_dirty;
 static bool s_alert;            // 振動で知らせたい出来事があった
+static Item s_stash[STASH_SIZE];
+static uint8_t s_codex[CODEX_BYTES];
 static bool s_warned_no_steps;
 static bool s_low_hp_alerted;   // 帰り道で「HPが少ない」と知らせたか（保存しない）
 
@@ -274,6 +279,8 @@ LogStyle game_log_style(int i) {
       return LOG_STYLE_GREAT;
     case LOG_ITEM:
       return e->a >= RARITY_RARE ? LOG_STYLE_GREAT : LOG_STYLE_DUNGEON;
+    case LOG_UPGRADE:
+      return e->c ? LOG_STYLE_GREAT : LOG_STYLE_DANGER;
     case LOG_WELCOME:
     case LOG_TOWN:
       return LOG_STYLE_TOWN;
@@ -322,6 +329,10 @@ void game_log_text(int i, char *buf, size_t size) {
       break;
     case LOG_IDENTIFY:
       snprintf(buf, size, "Identified: %s %s.", g_rarity_names[e->a % RARITY_COUNT], base_name(e->b));
+      break;
+    case LOG_UPGRADE:
+      if (e->c) snprintf(buf, size, "Smith: %s is now +%d!", base_name(e->b), e->a);
+      else snprintf(buf, size, "Smith: +%d on %s failed.", e->a, base_name(e->b));
       break;
     case LOG_BAG_FULL: snprintf(buf, size, "Bag full. Left %s.", base_name(e->b)); break;
     case LOG_GOLD: snprintf(buf, size, "Found %d gold.", e->b); break;
@@ -557,10 +568,58 @@ const Item *game_bag(int i) {
   return (i >= 0 && i < BAG_SIZE && s_bag[i].base) ? &s_bag[i] : NULL;
 }
 
+// ---- 図鑑 ----
+int game_codex_size(void) {
+  int n = g_base_count + g_special_count;
+  return n < CODEX_BYTES * 8 ? n : CODEX_BYTES * 8;
+}
+
+bool game_codex_seen(int i) {
+  if (i < 0 || i >= game_codex_size()) return false;
+  return (s_codex[i / 8] >> (i % 8)) & 1;
+}
+
+static void codex_set(int i) {
+  if (i < 0 || i >= game_codex_size() || game_codex_seen(i)) return;
+  s_codex[i / 8] |= (uint8_t)(1 << (i % 8));
+  s_dirty = true;
+}
+
+// 手に入れた物を図鑑に載せる。セット・固有装備は鑑定して名前が分かったときに載る
+static void codex_mark(const Item *it) {
+  if (!game_item_base(it)) return;
+  codex_set(it->base - 1);
+  int special = game_item_special(it);
+  if (special >= 0 && game_item_identified(it)) codex_set(g_base_count + special);
+}
+
+int game_codex_seen_count(void) {
+  int n = 0;
+  for (int i = 0; i < game_codex_size(); i++) n += game_codex_seen(i) ? 1 : 0;
+  return n;
+}
+
+const char *game_codex_name(int i) {
+  if (i < 0 || i >= game_codex_size()) return NULL;
+  return i < g_base_count ? g_bases[i].name : g_specials[i - g_base_count].name;
+}
+
+int game_codex_icon(int i) {
+  if (i < 0 || i >= game_codex_size()) return 0;
+  int base = i < g_base_count ? i : g_specials[i - g_base_count].base;
+  return g_bases[base].icon;
+}
+
+int game_codex_rarity(int i) {
+  if (i < g_base_count) return RARITY_NORMAL;
+  return g_specials[i - g_base_count].set_id ? RARITY_SET : RARITY_UNIQUE;
+}
+
 static bool bag_add(const Item *it) {
   int n = game_bag_count();
   if (n >= BAG_SIZE) return false;
   s_bag[n] = *it;
+  codex_mark(it);
   s_dirty = true;
   return true;
 }
@@ -1164,6 +1223,7 @@ static IdentResult identify(int bag_index) {
   const Item *it = game_bag(bag_index);
   if (!it || game_item_identified(it)) return IDENT_NONE;
   s_bag[bag_index].flags |= ITEM_FLAG_IDENTIFIED;
+  codex_mark(&s_bag[bag_index]);   // セット・固有装備はここで図鑑に載る
   log_push(LOG_IDENTIFY, s_bag[bag_index].rarity, s_bag[bag_index].base - 1, 0, 0);
   game_save();
   return IDENT_OK;
@@ -1185,6 +1245,83 @@ IdentResult game_identify_with_scroll(int bag_index) {
   if (s_hero.scrolls_id == 0) return IDENT_NO_SCROLL;
   s_hero.scrolls_id--;
   return identify(bag_index);
+}
+
+// ============================================================
+// 保管庫
+// ============================================================
+int game_stash_count(void) {
+  int n = 0;
+  while (n < STASH_SIZE && s_stash[n].base) n++;
+  return n;
+}
+
+const Item *game_stash(int i) {
+  return (i >= 0 && i < STASH_SIZE && s_stash[i].base) ? &s_stash[i] : NULL;
+}
+
+bool game_stash_put(int bag_index) {
+  if (s_run.mode != RUN_NONE) return false;
+  const Item *it = game_bag(bag_index);
+  int n = game_stash_count();
+  if (!it || n >= STASH_SIZE) return false;
+  s_stash[n] = *it;
+  bag_remove(bag_index);
+  game_save();
+  return true;
+}
+
+bool game_stash_take(int stash_index) {
+  if (s_run.mode != RUN_NONE) return false;
+  int n = game_stash_count();
+  if (stash_index < 0 || stash_index >= n || game_bag_count() >= BAG_SIZE) return false;
+  bag_add(&s_stash[stash_index]);
+  memmove(&s_stash[stash_index], &s_stash[stash_index + 1], sizeof(Item) * (n - stash_index - 1));
+  memset(&s_stash[n - 1], 0, sizeof(Item));
+  game_save();
+  return true;
+}
+
+// ============================================================
+// 鍛冶屋
+// ============================================================
+// 今の段階から次の段階へ上がる確率（+1〜+3 は必ず成功）
+static const uint8_t UPGRADE_CHANCE[MAX_PLUS] = { 100, 100, 100, 90, 80, 70, 60, 50, 40, 30 };
+
+int game_upgrade_cost(const Item *it) {
+  if (!game_item_base(it) || !game_item_identified(it) || it->plus >= MAX_PLUS) return 0;
+  int p = it->plus;
+  return (25 + it->ilvl * 5) * (p + 1) * (p + 2) / 4;
+}
+
+int game_upgrade_chance(const Item *it) {
+  if (!it || it->plus >= MAX_PLUS) return 0;
+  return UPGRADE_CHANCE[it->plus];
+}
+
+static UpgradeResult upgrade(Item *it) {
+  if (s_run.mode != RUN_NONE || !game_item_base(it)) return UPGRADE_NONE;
+  if (it->plus >= MAX_PLUS) return UPGRADE_MAX;
+  int cost = game_upgrade_cost(it);
+  if (cost == 0) return UPGRADE_NONE;   // 未鑑定
+  if (s_hero.gold < cost) return UPGRADE_NO_GOLD;
+  s_hero.gold -= cost;
+  // 失敗してもお金が減るだけ。装備は壊れない
+  bool ok = rnd(100) < UPGRADE_CHANCE[it->plus];
+  if (ok) it->plus++;
+  log_push(LOG_UPGRADE, ok ? it->plus : it->plus + 1, it->base - 1, ok ? 1 : 0, 0);
+  game_save();
+  return ok ? UPGRADE_OK : UPGRADE_FAILED;
+}
+
+UpgradeResult game_upgrade_equipped(int slot) {
+  if (slot < 0 || slot >= EQUIP_SLOTS || !s_equip[slot].base) return UPGRADE_NONE;
+  return upgrade(&s_equip[slot]);
+}
+
+UpgradeResult game_upgrade_bag(int bag_index) {
+  if (!game_bag(bag_index)) return UPGRADE_NONE;
+  return upgrade(&s_bag[bag_index]);
 }
 
 // ============================================================
@@ -1285,6 +1422,9 @@ void game_save(void) {
   persist_write_data(KEY_DROP, &s_drop, sizeof(s_drop));
   persist_write_data(KEY_DROP_EQUIP, s_drop_equip, sizeof(s_drop_equip));
   persist_write_data(KEY_DROP_BAG, s_drop_bag, sizeof(s_drop_bag));
+  persist_write_data(KEY_STASH_A, s_stash, sizeof(Item) * (STASH_SIZE / 2));
+  persist_write_data(KEY_STASH_B, &s_stash[STASH_SIZE / 2], sizeof(Item) * (STASH_SIZE / 2));
+  persist_write_data(KEY_CODEX, s_codex, sizeof(s_codex));
   s_dirty = false;
 }
 
@@ -1298,6 +1438,8 @@ static void new_game(void) {
   memset(&s_drop, 0, sizeof(s_drop));
   memset(s_drop_equip, 0, sizeof(s_drop_equip));
   memset(s_drop_bag, 0, sizeof(s_drop_bag));
+  memset(s_stash, 0, sizeof(s_stash));
+  memset(s_codex, 0, sizeof(s_codex));
   s_hero.version = SAVE_VERSION;
   s_hero.level = 1;
   s_hero.gold = 100;
@@ -1308,6 +1450,8 @@ static void new_game(void) {
   // 最初の装備
   s_equip[SLOT_WEAPON] = make_item(0, 1);
   s_equip[SLOT_BODY] = make_item(3, 1);
+  codex_mark(&s_equip[SLOT_WEAPON]);
+  codex_mark(&s_equip[SLOT_BODY]);
   log_push(LOG_WELCOME, 0, 0, 0, 0);
   game_save();
 }
@@ -1334,6 +1478,16 @@ void game_init(void) {
   persist_read_data(KEY_DROP, &s_drop, sizeof(s_drop));
   persist_read_data(KEY_DROP_EQUIP, s_drop_equip, sizeof(s_drop_equip));
   persist_read_data(KEY_DROP_BAG, s_drop_bag, sizeof(s_drop_bag));
+  memset(s_stash, 0, sizeof(s_stash));
+  memset(s_codex, 0, sizeof(s_codex));
+  persist_read_data(KEY_STASH_A, s_stash, sizeof(Item) * (STASH_SIZE / 2));
+  persist_read_data(KEY_STASH_B, &s_stash[STASH_SIZE / 2], sizeof(Item) * (STASH_SIZE / 2));
+  bool had_codex = persist_read_data(KEY_CODEX, s_codex, sizeof(s_codex)) > 0;
+  if (!had_codex) {
+    // 図鑑ができる前のセーブ: 今持っている物から図鑑を作る
+    for (int i = 0; i < EQUIP_SLOTS; i++) codex_mark(&s_equip[i]);
+    for (int i = 0; i < BAG_SIZE; i++) codex_mark(&s_bag[i]);
+  }
   // 壊れたデータへの保険
   if (s_hero.level < 1 || s_hero.level > MAX_LEVEL) s_hero.level = 1;
   if (s_run.mode > RUN_RETURN) s_run.mode = RUN_NONE;

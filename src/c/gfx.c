@@ -263,6 +263,20 @@ GColor gfx_rarity_color(const Item *it) {
   }
 }
 
+void gfx_item_row(RowSpec *row, const Item *it, char *name, size_t name_size, char *sub,
+                  size_t sub_size) {
+  const BaseDef *b = game_item_base(it);
+  if (!b) return;
+  row->icon = b->icon;
+  game_item_name(it, name, name_size);
+  row->title = name;
+  row->tint_title = true;
+  row->title_color = gfx_rarity_color(it);
+  gfx_item_stat_text(it, sub, sub_size);
+  row->sub = sub;
+  row->warn_sub = !game_item_identified(it);
+}
+
 void gfx_item_stat_text(const Item *it, char *buf, size_t size) {
   if (it && !game_item_identified(it)) {
     snprintf(buf, size, "Unidentified");

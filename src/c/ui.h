@@ -20,6 +20,9 @@ void status_window_push(void);    // ステータス・装備・持ち物
 void status_window_refresh(void);
 
 void identify_window_push(void);  // 鑑定屋
+void stash_window_push(void);     // 保管庫
+void smith_window_push(void);     // 鍛冶屋
+void codex_window_push(void);     // 図鑑
 
 void agent_window_push(void);     // 回収代行業者
 

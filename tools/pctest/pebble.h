@@ -41,7 +41,7 @@ static inline int32_t health_service_sum(HealthMetric m, time_t start, time_t en
 }
 
 // 保存領域（メモリ上の簡単な置き換え）
-#define PCTEST_PERSIST_KEYS 64
+#define PCTEST_PERSIST_KEYS 256
 #define PCTEST_PERSIST_SIZE 256
 extern uint8_t pctest_persist[PCTEST_PERSIST_KEYS][PCTEST_PERSIST_SIZE];
 extern int pctest_persist_len[PCTEST_PERSIST_KEYS];

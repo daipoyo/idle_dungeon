@@ -210,6 +210,124 @@ static void test_return_trip(void) {
   check(found > 0 && found < 120, "loot on the way back is possible but rare");
 }
 
+static void test_stash(void) {
+  puts("Stash");
+  reset_game(21);
+  for (int i = 0; i < 3; i++) s_bag[i] = make_item(i, 10);
+  Item second = s_bag[1];
+  check(game_stash_put(1) && game_stash_count() == 1 && game_bag_count() == 2, "bag -> stash");
+  check(memcmp(game_stash(0), &second, sizeof(Item)) == 0, "the same item is stored");
+  check(game_stash_take(0) && game_stash_count() == 0 && game_bag_count() == 3, "stash -> bag");
+
+  // 町の外では出し入れできない
+  game_stash_put(0);
+  s_run.mode = RUN_EXPLORE;
+  check(!game_stash_put(0) && !game_stash_take(0), "only in town");
+  s_run.mode = RUN_NONE;
+
+  // 保存して読み直しても残る（2つのキーにまたがる位置も）
+  memset(s_stash, 0, sizeof(s_stash));
+  for (int i = 0; i < STASH_SIZE; i++) s_stash[i] = make_item(i % g_base_count, 1 + i);
+  game_save();
+  memset(s_stash, 0, sizeof(s_stash));
+  game_init();
+  check(game_stash_count() == STASH_SIZE && s_stash[STASH_SIZE - 1].ilvl == STASH_SIZE,
+        "all 48 slots survive a reload");
+
+  // 死んでも保管庫は失わない
+  s_hero.auto_return_pct = 0;
+  game_depart(0);
+  s_run.hp = 1;
+  hurt(5);
+  check(s_run.mode == RUN_NONE && game_stash_count() == STASH_SIZE, "death leaves the stash alone");
+}
+
+static void test_blacksmith(void) {
+  puts("Blacksmith");
+  reset_game(33);
+  s_equip[SLOT_WEAPON] = make_item(0, 20);
+  s_hero.gold = 1000000;
+  int fails = 0, attempts = 0;
+  printf("  cost per step at ilvl 20:");
+  while (s_equip[SLOT_WEAPON].plus < MAX_PLUS && attempts < 500) {
+    int before = s_equip[SLOT_WEAPON].plus;
+    int cost = game_upgrade_cost(&s_equip[SLOT_WEAPON]);
+    int32_t gold = s_hero.gold;
+    UpgradeResult r = game_upgrade_equipped(SLOT_WEAPON);
+    attempts++;
+    if (s_hero.gold != gold - cost) { check(false, "the cost is charged exactly"); break; }
+    if (r == UPGRADE_FAILED) {
+      fails++;
+      if (s_equip[SLOT_WEAPON].plus != before || !s_equip[SLOT_WEAPON].base) {
+        check(false, "a failure never breaks or downgrades gear");
+        break;
+      }
+    } else if (before < 3 || r == UPGRADE_OK) {
+      if (r == UPGRADE_OK && s_equip[SLOT_WEAPON].plus == before + 1 && before != s_equip[SLOT_WEAPON].plus - 1) {
+        check(false, "success raises by one");
+      }
+      printf(" +%d:%dG", before + 1, cost);
+    }
+  }
+  printf("\n  reached +%d in %d attempts (%d failed), spent %ldG\n", s_equip[SLOT_WEAPON].plus,
+         attempts, fails, (long)(1000000 - s_hero.gold));
+  check(s_equip[SLOT_WEAPON].plus == MAX_PLUS, "can reach +10");
+  check(game_upgrade_equipped(SLOT_WEAPON) == UPGRADE_MAX, "stops at +10");
+
+  Item unident = make_drop_item(20, 3);
+  unident.rarity = RARITY_RARE;
+  unident.flags = 0;
+  s_bag[0] = unident;
+  check(game_upgrade_bag(0) == UPGRADE_NONE, "unidentified items cannot be upgraded");
+
+  s_bag[0] = make_item(1, 20);
+  s_hero.gold = 0;
+  check(game_upgrade_bag(0) == UPGRADE_NO_GOLD, "needs gold");
+}
+
+static void test_codex(void) {
+  puts("Codex");
+  reset_game(44);
+  check(game_codex_seen(0) && game_codex_seen(3), "starting gear is in the codex");
+  int before = game_codex_seen_count();
+
+  Item amulet = make_item(6, 5);
+  bag_add(&amulet);
+  check(game_codex_seen(6) && game_codex_seen_count() == before + 1, "picking up an item records it");
+
+  // 固有装備は鑑定するまで名前が載らない
+  int special = -1;
+  for (int i = 0; i < g_special_count; i++) if (!g_specials[i].set_id) { special = i; break; }
+  Item uniq = make_item(g_specials[special].base, 30);
+  uniq.rarity = RARITY_UNIQUE;
+  uniq.flags = (uint8_t)(special << ITEM_SPECIAL_SHIFT);   // 未鑑定
+  memset(s_bag, 0, sizeof(s_bag));
+  bag_add(&uniq);
+  check(!game_codex_seen(g_base_count + special), "an unidentified unique stays ???");
+  s_hero.scrolls_id = 1;
+  game_identify_with_scroll(0);
+  check(game_codex_seen(g_base_count + special), "identifying reveals it");
+
+  game_save();
+  memset(s_codex, 0, sizeof(s_codex));
+  game_init();
+  check(game_codex_seen(g_base_count + special), "the codex survives a reload");
+
+  // 図鑑のない古いセーブは、持ち物から作り直す
+  persist_delete(KEY_CODEX);
+  game_init();
+  // 装備（初期装備）と持ち物（鑑定済みの固有装備）からは載り、手放したお守りは載らない
+  check(game_codex_seen(0) && game_codex_seen(g_base_count + special) && !game_codex_seen(6),
+        "old saves rebuild the codex from what is carried");
+  printf("  codex: %d / %d entries\n", game_codex_seen_count(), game_codex_size());
+
+  // 保存領域の合計（Pebble は約4KB まで）
+  int total = 0;
+  for (int k = 0; k < PCTEST_PERSIST_KEYS; k++) total += pctest_persist_len[k];
+  printf("  persist storage used: %d bytes\n", total);
+  check(total < 4000, "save data fits in 4KB");
+}
+
 // 実際に歩いて遊んだときの様子（バランス確認）
 //   margin: ダンジョン選びの強気さ（敵のレベルが「勇者のレベル + margin」までなら入る）
 static void play_days(int days, int margin, bool verbose) {
@@ -263,6 +381,9 @@ int main(void) {
   test_identify();
   test_sets();
   test_return_trip();
+  test_stash();
+  test_blacksmith();
+  test_codex();
   test_play_balance();
   printf("\n%s (%d failure%s)\n", s_failures ? "FAILED" : "ALL PASSED", s_failures,
          s_failures == 1 ? "" : "s");

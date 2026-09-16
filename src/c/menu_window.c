@@ -9,14 +9,17 @@ typedef enum {
   CMD_DUNGEONS,
   CMD_SHOP,
   CMD_STATUS,
+  CMD_STASH,
+  CMD_SMITH,
   CMD_IDENTIFY,
   CMD_AGENT,
+  CMD_CODEX,
   CMD_SETTINGS,
   CMD_PORTAL,
   CMD_WALK_BACK,
 } Command;
 
-#define MAX_COMMANDS 7
+#define MAX_COMMANDS 10
 
 static Window *s_window;
 static MenuLayer *s_menu;
@@ -27,13 +30,17 @@ static int build_commands(Command *out) {
     out[n++] = CMD_DUNGEONS;
     out[n++] = CMD_SHOP;
     out[n++] = CMD_STATUS;
+    out[n++] = CMD_STASH;
+    out[n++] = CMD_SMITH;
     if (game_unidentified_count() > 0) out[n++] = CMD_IDENTIFY;
     if (game_drop_exists()) out[n++] = CMD_AGENT;
+    out[n++] = CMD_CODEX;
     out[n++] = CMD_SETTINGS;
   } else {
     out[n++] = CMD_PORTAL;
     if (game_run_mode() == RUN_EXPLORE) out[n++] = CMD_WALK_BACK;
     out[n++] = CMD_STATUS;
+    out[n++] = CMD_CODEX;
     out[n++] = CMD_SETTINGS;
   }
   return n;
@@ -69,6 +76,23 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
       row.icon = 5;
       row.title = "Status";
       row.sub = game_can_change_gear() ? "Gear & bag" : "View only";
+      break;
+    case CMD_STASH:
+      row.icon = 11;
+      row.title = "Stash";
+      snprintf(sub, sizeof(sub), "%d/%d stored", game_stash_count(), STASH_SIZE);
+      row.sub = sub;
+      break;
+    case CMD_SMITH:
+      row.icon = 3;
+      row.title = "Blacksmith";
+      row.sub = "Upgrade to +10";
+      break;
+    case CMD_CODEX:
+      row.icon = 14;
+      row.title = "Codex";
+      snprintf(sub, sizeof(sub), "%d/%d found", game_codex_seen_count(), game_codex_size());
+      row.sub = sub;
       break;
     case CMD_IDENTIFY:
       row.icon = 13;
@@ -117,6 +141,15 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
       break;
     case CMD_STATUS:
       status_window_push();
+      break;
+    case CMD_STASH:
+      stash_window_push();
+      break;
+    case CMD_SMITH:
+      smith_window_push();
+      break;
+    case CMD_CODEX:
+      codex_window_push();
       break;
     case CMD_IDENTIFY:
       identify_window_push();

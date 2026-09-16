@@ -21,6 +21,8 @@
 #define PORTAL_PRICE 60
 #define MAX_IDENT_SCROLLS 9
 #define IDENT_SCROLL_PRICE 45
+#define STASH_SIZE 48          // 保管庫（24個ずつ2つのキーに保存）
+#define CODEX_BYTES 128        // 図鑑の既読ビット（1024種類まで）
 
 // ---- 装備枠 ----
 typedef enum {
@@ -134,6 +136,7 @@ typedef enum {
   LOG_NO_STEPS,     // 歩数が取れない
   LOG_SUMMARY,      // まとめ a=レベル b=戦闘 c=ゴールド d=アイテム
   LOG_IDENTIFY,     // 鑑定した a=レア度 b=基本アイテム
+  LOG_UPGRADE,      // 鍛冶屋 a=強化後の段階 b=基本アイテム c=成功なら1
 } LogType;
 
 // レア度の呼び名（White/Blue/Yellow/Green/Gold）
@@ -241,6 +244,28 @@ int game_unidentified_count(void);
 typedef enum { IDENT_OK, IDENT_NO_GOLD, IDENT_NO_SCROLL, IDENT_NONE } IdentResult;
 IdentResult game_identify_with_gold(int bag_index);
 IdentResult game_identify_with_scroll(int bag_index);
+
+// ---- 保管庫（町でだけ出し入れできる。死んでも失わない） ----
+int game_stash_count(void);
+const Item *game_stash(int i);
+bool game_stash_put(int bag_index);     // 持ち物 → 保管庫
+bool game_stash_take(int stash_index);  // 保管庫 → 持ち物
+
+// ---- 鍛冶屋（+1〜+10。失敗してもお金が減るだけで、壊れない） ----
+typedef enum { UPGRADE_OK, UPGRADE_FAILED, UPGRADE_NO_GOLD, UPGRADE_MAX, UPGRADE_NONE } UpgradeResult;
+int game_upgrade_cost(const Item *it);     // 次の段階へのお金。強化できなければ 0
+int game_upgrade_chance(const Item *it);   // 成功率（%）
+UpgradeResult game_upgrade_equipped(int slot);
+UpgradeResult game_upgrade_bag(int bag_index);
+
+// ---- 図鑑（一度手に入れた物だけ名前が分かる） ----
+//   番号: 0〜基本アイテム数-1 が基本アイテム、その後にセット・固有装備
+int game_codex_size(void);
+int game_codex_seen_count(void);
+bool game_codex_seen(int i);
+const char *game_codex_name(int i);
+int game_codex_icon(int i);
+int game_codex_rarity(int i);
 
 // ---- 死亡時に残した物 ----
 bool game_drop_exists(void);
