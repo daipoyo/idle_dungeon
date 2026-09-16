@@ -5,7 +5,7 @@
 // ============================================================
 
 const ShapeDef g_shapes[SHAPE_COUNT] = {
-#define X(id, name, slot, fam, icon, rank, atk, def, hp) { name, slot, fam, icon, rank, atk, def, hp },
+#define X(id, name, slot, fam, rank, atk, def, hp) { name, slot, fam, rank, atk, def, hp },
   SHAPE_LIST(X)
 #undef X
 };

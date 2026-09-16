@@ -60,7 +60,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   }
   static char name[32];
   int fee = game_identify_fee(it);
-  row.icon = game_item_shape(it)->icon;
+  row.item = it;
   game_item_short_name(it, name, sizeof(name));   // 鑑定するまで本当の名前は分からない
   row.title = name;
   row.tint_title = true;

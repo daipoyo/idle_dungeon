@@ -711,13 +711,6 @@ void game_codex_name(int i, char *buf, size_t size) {
   game_item_short_name(&probe, buf, size);
 }
 
-int game_codex_icon(int i) {
-  Item probe = { 0 };
-  probe.base = (uint16_t)(i + 1);
-  const ShapeDef *sh = game_item_shape(&probe);
-  return sh ? sh->icon : 0;
-}
-
 int game_codex_rarity(int i) {
   if (i < BASE_COUNT) return RARITY_NORMAL;
   return g_specials[i - BASE_COUNT].set_id ? RARITY_SET : RARITY_UNIQUE;

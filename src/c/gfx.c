@@ -1,4 +1,5 @@
 #include "gfx.h"
+#include "item_art.h"
 #include "game.h"
 #include "sprite_data.h"
 #include "font_data.h"
@@ -247,9 +248,44 @@ void gfx_draw_item_icon(GContext *ctx, int item_id, int x, int y) {
   graphics_draw_bitmap_in_rect(ctx, s_item_sub, GRect(x, y, ICON_SIZE, ICON_SIZE));
 }
 
+// 絵はリソース（item_icons.bin）にまとめてあり、描くたびに1つ分だけ読む
 void gfx_draw_item(GContext *ctx, const Item *it, int x, int y) {
   const ShapeDef *sh = game_item_shape(it);
-  if (sh) gfx_draw_item_icon(ctx, sh->icon, x, y);
+  if (!sh) return;
+  int special = game_item_special(it);
+  bool own_art = special >= 0 && game_item_identified(it);
+  int icon = own_art ? ITEM_ICON_SPECIAL_FIRST + special : (int)(sh - g_shapes);
+
+  static ResHandle s_icons;
+  if (!s_icons) s_icons = resource_get_handle(RESOURCE_ID_ITEM_ICONS);
+  uint8_t rec[ITEM_ICON_RECORD];
+  if (resource_load_byte_range(s_icons, icon * ITEM_ICON_RECORD, rec, sizeof(rec)) != sizeof(rec)) return;
+
+  // 色: 0 = 透明、1 = 輪郭、2〜4 = 素材（暗・中・明）、5〜6 = 形ごとの固定色
+  GColor pal[7];
+  for (int i = 0; i < 6; i++) pal[i + 1] = (GColor){ .argb = rec[i] };
+  if (!own_art) {
+    const uint8_t *tier = ITEM_TIER_COLORS[sh->family][game_item_tier(it)];
+    for (int i = 0; i < 3; i++) pal[i + 2] = (GColor){ .argb = tier[i] };
+  }
+  for (int row = 0; row < ITEM_ICON_DOTS; row++) {
+    const uint8_t *line = rec + 6 + row * ITEM_ICON_DOTS / 2;
+    // 同じ色が続くところはまとめて塗る
+    int col = 0;
+    while (col < ITEM_ICON_DOTS) {
+      int v = (line[col / 2] >> (col % 2 ? 0 : 4)) & 0x0F;
+      int run = 1;
+      while (col + run < ITEM_ICON_DOTS &&
+             ((line[(col + run) / 2] >> ((col + run) % 2 ? 0 : 4)) & 0x0F) == v) {
+        run++;
+      }
+      if (v > 0 && v < 7) {
+        graphics_context_set_fill_color(ctx, pal[v]);
+        graphics_fill_rect(ctx, GRect(x + col * PX, y + row * PX, run * PX, PX), 0, GCornerNone);
+      }
+      col += run;
+    }
+  }
 }
 
 GColor gfx_rarity_color(const Item *it) {
@@ -265,9 +301,9 @@ GColor gfx_rarity_color(const Item *it) {
 
 void gfx_item_row(RowSpec *row, const Item *it, char *name, size_t name_size, char *sub,
                   size_t sub_size) {
-  const ShapeDef *sh = game_item_shape(it);
-  if (!sh) return;
-  row->icon = sh->icon;
+  if (!game_item_shape(it)) return;
+  row->icon = -1;
+  row->item = it;
   // 一覧は短い名前。接辞まで含めた名前は詳細画面で出す
   game_item_short_name(it, name, name_size);
   row->title = name;
@@ -348,7 +384,10 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   if (hi) gfx_draw_cursor(ctx, x, ty, THEME_HI);
   x += 4 * PX;
 
-  if (row->icon >= 0) {
+  if (row->item) {
+    gfx_draw_item(ctx, row->item, x - PX, SNAP((b.size.h - ITEM_ICON_SIZE) / 2));
+    x += ITEM_ICON_SIZE + PX;
+  } else if (row->icon >= 0) {
     gfx_draw_item_icon(ctx, row->icon, x, SNAP((b.size.h - ICON_SIZE) / 2));
     x += ICON_SIZE + 2 * PX;
   } else if (row->bitmap) {

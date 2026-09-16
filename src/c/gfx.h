@@ -58,8 +58,11 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
 void gfx_items_acquire(void);
 void gfx_items_release(void);
 void gfx_draw_item_icon(GContext *ctx, int icon, int x, int y);
-// アイテムのアイコン（Item から）と、性能の短い文字列（"ATK+12 HP+5"）
+// 図鑑アイテムの絵（ITEM_ICON_SIZE 四方）。素材の段階で色が変わる。
+// 未鑑定の固有・セット装備は、正体が分からないよう元の形の絵で描く
+#define ITEM_ICON_SIZE (12 * PX)
 void gfx_draw_item(GContext *ctx, const Item *it, int x, int y);
+// 性能の短い文字列（"ATK+12 HP+5"）
 void gfx_item_stat_text(const Item *it, char *buf, size_t size);
 // レア度の色（白・青・黄・緑・金）
 GColor gfx_rarity_color(const Item *it);
@@ -74,7 +77,8 @@ void gfx_keeper_release(void);
 // メニューの1行（カーソル＋アイコン＋タイトル＋サブテキスト＋右端の短い文字）
 #define ROW_H (IS_LARGE_SCREEN ? 48 : 40)
 typedef struct {
-  int icon;            // アイテムアイコン番号（-1 でなし）
+  int icon;            // メニュー用の小さいアイコン番号（-1 でなし）
+  const Item *item;    // 図鑑アイテムの絵（icon より優先。NULL 可）
   GBitmap *bitmap;     // アイコンの代わりに描く ENEMY_SIZE 四方の画像（NULL 可）
   const char *title;
   const char *sub;

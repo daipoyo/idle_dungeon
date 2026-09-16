@@ -86,13 +86,13 @@ static void draw_content(Layer *layer, GContext *ctx) {
   Pen p = { ctx, b.size.w, 0 };
 
   // アイコンと名前（名前は長ければ折り返す）
-  int name_x = ICON_SIZE + 2 * PX;
+  int name_x = ITEM_ICON_SIZE + 2 * PX;
   game_item_name(it, buf, sizeof(buf));
   int name_h = gfx_text_lines(buf, b.size.w - name_x) * LINE_H;
   gfx_draw_item(ctx, it, 0, -s_scroll);
   gfx_text(ctx, buf, GRect(name_x, -s_scroll, b.size.w - name_x, name_h), GTextAlignmentLeft,
            gfx_rarity_color(it));
-  p.y = (name_h > ICON_SIZE ? name_h : ICON_SIZE) + PX;
+  p.y = (name_h > ITEM_ICON_SIZE ? name_h : ITEM_ICON_SIZE) + PX;
 
   bool identified = game_item_identified(it);
   const ShapeDef *sh = game_item_shape(it);

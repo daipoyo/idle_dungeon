@@ -42,8 +42,14 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   row.sub = sub;
   if (game_codex_seen(i)) {
     static char name[32];
+    static Item probe;
     game_codex_name(i, name, sizeof(name));
-    row.icon = game_codex_icon(i);
+    // 図鑑の番号 = base - 1。見本として、その段階の素材・鑑定済みで描く
+    memset(&probe, 0, sizeof(probe));
+    probe.base = (uint16_t)(i + 1);
+    probe.flags = ITEM_FLAG_IDENTIFIED;
+    probe.ilvl = 50;
+    row.item = &probe;
     row.title = name;
     row.tint_title = true;
     row.title_color = rarity_color(rarity);

@@ -252,7 +252,6 @@ int game_codex_size(void);
 int game_codex_seen_count(void);
 bool game_codex_seen(int i);
 void game_codex_name(int i, char *buf, size_t size);
-int game_codex_icon(int i);
 int game_codex_rarity(int i);
 
 // ---- 死亡時に残した物 ----

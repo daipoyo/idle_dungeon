@@ -293,11 +293,12 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
     } else {
       int i = index->row - BUY_GEAR_FIRST;
       static char name[32];
-      Item it = game_shop_gear(i);
+      static Item it;   // 描き終わるまで残しておく
+      it = game_shop_gear(i);
       char stats[24];
       gfx_item_stat_text(&it, stats, sizeof(stats));
       int cost = game_shop_gear_cost(i);
-      row.icon = game_item_shape(&it)->icon;
+      row.item = &it;
       game_item_short_name(&it, name, sizeof(name));
       row.title = name;
       snprintf(sub, sizeof(sub), "%dG %s", cost, stats);

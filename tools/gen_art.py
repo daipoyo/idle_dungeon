@@ -21,6 +21,7 @@ from pebble_art import PAL, new_image, save, upscale, on_bg  # noqa: E402
 import gb_sprites  # noqa: E402
 import gb_scenes  # noqa: E402
 import gb_font  # noqa: E402
+import gb_items  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMG_DIR = os.path.join(ROOT, 'resources', 'images')
@@ -213,11 +214,16 @@ def main():
     write_sprite_data(frames, weapons)
     write_font_data()
 
+    # --- 図鑑アイテムの絵（resources/data/item_icons.bin と src/c/item_art.h） ---
+    shapes, specials = gb_items.build(ROOT, PAL)
+    report.append(('item_icons.bin', (len(shapes) + len(specials), 1), 6))
+
     for name, size, n in report:
         print('%-22s %3dx%-3d colors=%d' % (name, size[0], size[1], n))
 
     if preview_dir:
         write_previews(preview_dir, icons, enemies, chests, scenes, shop, face, frames, weapons)
+        gb_items.preview(ROOT, PAL, preview_dir, new_image, upscale)
 
 
 def write_previews(d, icons, enemies, chests, scenes, shop, face, frames, weapons):
