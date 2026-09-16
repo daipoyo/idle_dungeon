@@ -164,6 +164,52 @@ static void test_sets(void) {
   check(paired.atk + paired.def + paired.hp > alone.atk + alone.def + alone.hp, "set bonus applies");
 }
 
+static void test_return_trip(void) {
+  puts("Walking back");
+  reset_game(5);
+  s_hero.auto_return_pct = 30;
+  check(game_depart(0), "the hero sets out");
+  s_run.mode = RUN_RETURN;
+  s_run.depth = 600;
+  s_run.return_left = 600;
+  s_run.hp = game_max_hp() / 10;   // 瀕死
+
+  // 巻物があれば帰り道でも使う
+  s_hero.portals = 1;
+  check_auto_return();
+  check(s_run.mode == RUN_NONE && s_hero.portals == 0, "a portal scroll is used on the way back");
+
+  // 巻物がなければ歩き続けるが、知らせるのは一度だけ
+  reset_game(5);
+  s_hero.auto_return_pct = 30;
+  game_depart(0);
+  s_run.mode = RUN_RETURN;
+  s_run.depth = s_run.return_left = 600;
+  s_run.hp = game_max_hp() / 10;
+  s_hero.portals = 0;
+  s_alert = false;
+  check_auto_return();
+  check(s_run.mode == RUN_RETURN && s_alert, "without a scroll the hero keeps walking, and warns");
+  s_alert = false;
+  check_auto_return();
+  check(!s_alert, "the warning does not repeat");
+
+  // 帰り道でも、低い確率で拾い物がある
+  reset_game(5);
+  game_depart(0);
+  s_run.mode = RUN_RETURN;
+  s_run.depth = s_run.return_left = 4000;
+  int found = 0;
+  for (int i = 0; i < 400; i++) {
+    s_run.hp = game_max_hp();      // 死なないように回復させておく
+    memset(s_bag, 0, sizeof(s_bag));
+    return_event();
+    for (int b = 0; b < BAG_SIZE; b++) found += s_bag[b].base ? 1 : 0;
+  }
+  printf("  items found in 400 events on the way back: %d\n", found);
+  check(found > 0 && found < 120, "loot on the way back is possible but rare");
+}
+
 // 実際に歩いて遊んだときの様子（バランス確認）
 //   margin: ダンジョン選びの強気さ（敵のレベルが「勇者のレベル + margin」までなら入る）
 static void play_days(int days, int margin, bool verbose) {
@@ -216,6 +262,7 @@ int main(void) {
   test_stats_and_price();
   test_identify();
   test_sets();
+  test_return_trip();
   test_play_balance();
   printf("\n%s (%d failure%s)\n", s_failures ? "FAILED" : "ALL PASSED", s_failures,
          s_failures == 1 ? "" : "s");

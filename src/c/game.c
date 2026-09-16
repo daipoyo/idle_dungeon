@@ -166,6 +166,7 @@ static Item s_drop_bag[BAG_SIZE];
 static bool s_dirty;
 static bool s_alert;            // 振動で知らせたい出来事があった
 static bool s_warned_no_steps;
+static bool s_low_hp_alerted;   // 帰り道で「HPが少ない」と知らせたか（保存しない）
 
 // ============================================================
 // 乱数（探索ごとの状態を保存しておく）
@@ -787,18 +788,28 @@ static void start_return(void) {
   s_run.next_event = s_run.return_left > 90 ? s_run.return_left - 90 : 0;
 }
 
-// 自動帰還の判定（奥へ進んでいるときだけ）
+// 自動帰還の判定
+//   奥へ進んでいるとき: 巻物があれば使い、なければ歩いて帰り始める
+//   帰り道: 弱ったまま歩き続けると死ぬので、巻物があればここでも使う
 static void check_auto_return(void) {
-  if (s_run.mode != RUN_EXPLORE || !s_hero.auto_return_pct) return;
+  if (s_run.mode == RUN_NONE || !s_hero.auto_return_pct) return;
   if (s_run.hp * 100 >= game_max_hp() * s_hero.auto_return_pct) return;
-  s_alert = true;
   if (s_hero.portals > 0) {
+    s_alert = true;
     s_hero.portals--;
     log_push(LOG_PORTAL, 0, 0, 0, 0);
     arrive_town();
-  } else {
+    return;
+  }
+  if (s_run.mode == RUN_EXPLORE) {
+    s_alert = true;
     log_push(LOG_LOW_HP, 0, 0, 0, 0);
     start_return();
+  } else if (!s_low_hp_alerted) {
+    // 帰り道で巻物がないときは、知らせるのは最初の一度だけ
+    s_alert = true;
+    s_low_hp_alerted = true;
+    log_push(LOG_LOW_HP, 0, 0, 0, 0);
   }
 }
 
@@ -904,21 +915,26 @@ static void explore_event(void) {
   // 残りは何も起きない
 }
 
-// 帰り道の出来事（奥へ進むときより穏やか）
+// 帰り道の出来事（奥へ進むときより穏やか。拾い物もあるが確率は低い）
 static void return_event(void) {
   int mlvl = monster_level(floor_at(s_run.return_left));
   int r = rnd(100);
   if (r < 35) {
-    battle(s_run.dungeon * 4 + rnd(3), mlvl, false);
+    if (battle(s_run.dungeon * 4 + rnd(3), mlvl, false)) {
+      if (rnd(100) < 6) found_item(mlvl);
+      check_auto_return();
+    }
   } else if (r < 45) {
     int g = 2 + mlvl * 2 + rnd(mlvl * 2 + 2);
     add_gold(g);
     log_push(LOG_GOLD, 0, g, 0, 0);
   } else if (r < 52) {
     int d = game_max_hp() * (6 + rnd(6)) / 100;
-    hurt(d < 1 ? 1 : d);
+    if (!hurt(d < 1 ? 1 : d)) check_auto_return();
   } else if (r < 58) {
     fountain();
+  } else if (r < 62) {
+    found_item(mlvl);
   }
 }
 
@@ -1045,6 +1061,7 @@ bool game_depart(int idx) {
   s_run.run_gold = 0;
   steps_snapshot(&s_run.snap);
   s_warned_no_steps = false;
+  s_low_hp_alerted = false;
   log_push(LOG_DEPART, idx, 0, 0, 0);
   game_save();
   return true;
