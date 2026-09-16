@@ -181,6 +181,8 @@ int game_drop_item_count(void);
 int32_t game_drop_seconds_left(void);
 int32_t game_drop_fee(void);
 typedef enum { AGENT_OK, AGENT_NO_GOLD, AGENT_NO_ROOM, AGENT_NONE } AgentResult;
+// 依頼できるかどうかだけを調べる（お金は減らない）
+AgentResult game_agent_check(void);
 AgentResult game_hire_agent(void);
 
 // ---- ログ ----

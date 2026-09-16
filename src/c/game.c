@@ -912,16 +912,21 @@ int32_t game_drop_fee(void) {
   return 100 * (s_drop.dungeon + 1) + value / 4;
 }
 
-AgentResult game_hire_agent(void) {
+AgentResult game_agent_check(void) {
   if (!s_drop.active || s_run.mode != RUN_NONE) return AGENT_NONE;
-  int32_t fee = game_drop_fee();
-  if (s_hero.gold < fee) return AGENT_NO_GOLD;
+  if (s_hero.gold < game_drop_fee()) return AGENT_NO_GOLD;
   // 全部を持ち帰れるだけの空きが必要
   int need = 0;
   for (int i = 0; i < EQUIP_SLOTS; i++) if (s_drop_equip[i].base && s_equip[i].base) need++;
   for (int i = 0; i < BAG_SIZE; i++) if (s_drop_bag[i].base) need++;
   if (game_bag_count() + need > BAG_SIZE) return AGENT_NO_ROOM;
-  s_hero.gold -= fee;
+  return AGENT_OK;
+}
+
+AgentResult game_hire_agent(void) {
+  AgentResult check = game_agent_check();
+  if (check != AGENT_OK) return check;
+  s_hero.gold -= game_drop_fee();
   int taken = take_drop();
   s_hero.gold += s_drop.gold;
   s_drop.active = 0;
