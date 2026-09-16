@@ -11,6 +11,7 @@ uint8_t pctest_persist[PCTEST_PERSIST_KEYS][PCTEST_PERSIST_SIZE];
 int pctest_persist_len[PCTEST_PERSIST_KEYS];
 
 #include "../../src/c/game.c"
+#include "../../src/c/items.c"
 #include "../../src/c/steps.c"
 
 static int s_failures;
@@ -109,7 +110,7 @@ static void test_stats_and_price(void) {
 static void test_identify(void) {
   puts("Identify");
   reset_game(7);
-  Item rare = make_drop_item(20, 5);
+  Item rare = make_item(SH_LONG_SWORD, 20);
   rare.rarity = RARITY_RARE;
   rare.flags &= (uint8_t)~ITEM_FLAG_IDENTIFIED;
   s_bag[0] = rare;
@@ -132,36 +133,208 @@ static void test_identify(void) {
   check(game_identify_with_scroll(0) == IDENT_OK && s_hero.scrolls_id == 0, "scroll identifies");
 }
 
-static void test_sets(void) {
-  puts("Set bonuses");
-  reset_game(11);
-  // 同じセットの2つを装備する
-  int first = -1, second = -1;
+// 固有・セット装備を鑑定済みで作る
+static Item special_item(int special, int ilvl) {
+  Item it = make_special_item(special, ilvl);
+  it.flags |= ITEM_FLAG_IDENTIFIED;
+  return it;
+}
+
+static int find_special(const char *name) {
   for (int i = 0; i < g_special_count; i++) {
-    if (!g_specials[i].set_id) continue;
-    if (first < 0) first = i;
-    else if (g_specials[i].set_id == g_specials[first].set_id && g_specials[i].base != g_specials[first].base) {
-      second = i;
-      break;
+    if (strcmp(g_specials[i].name, name) == 0) return i;
+  }
+  printf("  (missing special: %s)\n", name);
+  return 0;
+}
+
+static void wear(const Item *it) {
+  int slot = g_shapes[g_specials[game_item_special(it)].shape].slot;
+  if (slot == SLOT_RING1 && s_equip[SLOT_RING1].base) slot = SLOT_RING2;
+  s_equip[slot] = *it;
+}
+
+static void test_catalog(void) {
+  puts("Catalog");
+  printf("  shapes %d x materials %d = %d, specials %d, sets %d -> codex %d\n", SHAPE_COUNT,
+         TIER_COUNT, BASE_COUNT, g_special_count, g_set_count, game_codex_size());
+  check(SHAPE_COUNT == 150, "150 shapes");
+  check(g_special_count == 100, "64 uniques + 36 set pieces");
+  check(game_codex_size() == 1000, "codex has 1000 entries");
+  check(game_codex_size() <= CODEX_BYTES * 8, "codex fits its save bits");
+
+  // 名前の長さ（Pebble Time 2 の一覧は20文字）
+  char name[40];
+  int longest = 0, over = 0;
+  char longest_name[40] = "";
+  for (int i = 0; i < game_codex_size(); i++) {
+    game_codex_name(i, name, sizeof(name));
+    int len = (int)strlen(name);
+    if (len > longest) {
+      longest = len;
+      strcpy(longest_name, name);
+    }
+    over += len > 20;
+  }
+  printf("  longest list name: %s (%d chars)\n", longest_name, longest);
+  check(over == 0, "every list name fits 20 characters");
+
+  // 名前の重複
+  int dup = 0;
+  char other[40];
+  for (int i = 0; i < game_codex_size(); i++) {
+    game_codex_name(i, name, sizeof(name));
+    for (int j = i + 1; j < game_codex_size(); j++) {
+      game_codex_name(j, other, sizeof(other));
+      if (strcmp(name, other) == 0) dup++;
     }
   }
-  check(first >= 0 && second >= 0, "the table has a set with two pieces");
-  Item a = make_item(g_specials[first].base, 30);
-  a.rarity = RARITY_SET;
-  a.flags = ITEM_FLAG_IDENTIFIED | (uint8_t)(first << ITEM_SPECIAL_SHIFT);
-  memset(s_equip, 0, sizeof(s_equip));
-  s_equip[g_bases[g_specials[first].base].slot] = a;
-  ItemStats alone = game_item_stats(&a);
+  check(dup == 0, "no two codex entries share a name");
 
-  Item b = make_item(g_specials[second].base, 30);
-  b.rarity = RARITY_SET;
-  b.flags = ITEM_FLAG_IDENTIFIED | (uint8_t)(second << ITEM_SPECIAL_SHIFT);
-  s_equip[g_bases[g_specials[second].base].slot] = b;
-  ItemStats paired = game_item_stats(&a);
-  printf("  1 piece: ATK+%d DEF+%d HP+%d -> 2 pieces: ATK+%d DEF+%d HP+%d\n",
-         alone.atk, alone.def, alone.hp, paired.atk, paired.def, paired.hp);
-  check(game_set_pieces_equipped(&a) == 2, "set pieces are counted");
-  check(paired.atk + paired.def + paired.hp > alone.atk + alone.def + alone.hp, "set bonus applies");
+  // 形ごとの装備枠の数
+  int per_slot[EQUIP_SLOTS] = { 0 };
+  for (int i = 0; i < SHAPE_COUNT; i++) per_slot[g_shapes[i].slot]++;
+  printf("  shapes per slot: weapon %d, offhand %d, head %d, body %d, hands %d, feet %d, amulet %d, ring %d\n",
+         per_slot[SLOT_WEAPON], per_slot[SLOT_OFFHAND], per_slot[SLOT_HEAD], per_slot[SLOT_BODY],
+         per_slot[SLOT_HANDS], per_slot[SLOT_FEET], per_slot[SLOT_AMULET], per_slot[SLOT_RING1]);
+
+  // セットは3部位で、同時に着けられる（装備枠が重ならない）
+  bool sets_ok = true;
+  for (int set = 1; set <= g_set_count; set++) {
+    int count = 0, slots_seen = 0;
+    for (int i = 0; i < g_special_count; i++) {
+      if (g_specials[i].set_id != set) continue;
+      int slot = g_shapes[g_specials[i].shape].slot;
+      if (slots_seen & (1 << slot)) sets_ok = false;
+      slots_seen |= 1 << slot;
+      count++;
+    }
+    if (count != 3) sets_ok = false;
+  }
+  check(sets_ok, "each set has 3 pieces in different slots");
+
+  // 各ダンジョンに固有装備が8種、うちボス専用が1種
+  bool uniques_ok = true;
+  for (int d = 0; d < DUNGEON_COUNT; d++) {
+    int n = 0, boss = 0;
+    for (int i = 0; i < g_special_count; i++) {
+      if (g_specials[i].set_id || g_specials[i].dungeon != d) continue;
+      n++;
+      boss += g_specials[i].boss;
+    }
+    if (n != 8 || boss != 1) uniques_ok = false;
+  }
+  check(uniques_ok, "8 uniques per dungeon, one of them from the boss");
+
+  // どの形も、アイテムLv 1 で性能が全部 0 にならない（ばらつきが一番低い値でも）
+  int zero = 0;
+  for (int shape = 0; shape < SHAPE_COUNT; shape++) {
+    for (int seed = 0; seed < 31; seed++) {
+      Item probe = make_item(shape, 1);
+      probe.seed = (uint16_t)seed;
+      ItemStats st = game_item_stats(&probe);
+      if (st.atk + st.def + st.hp == 0) zero++;
+    }
+  }
+  check(zero == 0, "no item has all-zero stats, even at item level 1");
+
+  // 素材は アイテムLv に合う
+  Item low = make_item(SH_CLAYMORE, 3), high = make_item(SH_CLAYMORE, 47);
+  game_item_short_name(&low, name, sizeof(name));
+  game_item_short_name(&high, other, sizeof(other));
+  printf("  Claymore at ilvl 3: %s, at ilvl 47: %s\n", name, other);
+  check(strcmp(name, "Bronze Claymore") == 0 && strcmp(other, "Void Claymore") == 0,
+        "material follows item level");
+}
+
+static void test_sets(void) {
+  puts("Sets and effects");
+  reset_game(11);
+  memset(s_equip, 0, sizeof(s_equip));
+
+  Item hood = special_item(find_special("Scout Hood"), 5);
+  Item knife = special_item(find_special("Scout Knife"), 5);
+  Item shoes = special_item(find_special("Scout Shoes"), 5);
+  wear(&hood);
+  check(game_set_pieces_equipped(&hood) == 1 && game_effect_total(FX_STRIDE) == 0, "one piece: no bonus");
+  wear(&knife);
+  check(game_effect_total(FX_STRIDE) == 5 && game_effect_total(FX_GOLD) == 0, "two pieces: Stride +5%");
+  wear(&shoes);
+  check(game_effect_total(FX_STRIDE) == 5 && game_effect_total(FX_GOLD) == 20, "three pieces: Gold +20% too");
+
+  // 同じ指輪を2つ着けても1部位
+  memset(s_equip, 0, sizeof(s_equip));
+  Item band = special_item(find_special("Grave Band"), 12);
+  wear(&band);
+  wear(&band);
+  check(game_set_pieces_equipped(&band) == 1, "a duplicate ring counts once");
+
+  // 固有装備の効果が合計される
+  memset(s_equip, 0, sizeof(s_equip));
+  Item cloak = special_item(find_special("Batwing Cloak"), 5);
+  Item treads = special_item(find_special("Eelskin Treads"), 25);
+  wear(&cloak);
+  wear(&treads);
+  check(game_effect_total(FX_STRIDE) == 17, "unique effects add up (5 + 12)");
+
+  // 未鑑定の固有装備は効果を出さない
+  s_equip[SLOT_BODY].flags = 0;
+  check(game_effect_total(FX_STRIDE) == 12, "an unidentified unique has no effect");
+
+  // 上限
+  memset(s_equip, 0, sizeof(s_equip));
+  Item leech = special_item(find_special("Hellhound Collar"), 45);
+  Item leech2 = special_item(find_special("Trollblood Cuirass"), 40);
+  Item leech3 = special_item(find_special("Ghoulclaw"), 15);
+  wear(&leech);
+  wear(&leech2);
+  wear(&leech3);
+  check(game_effect_total(FX_LEECH) == 15, "effects are capped (Leech 18% -> 15%)");
+
+  // ストライドで同じ歩数でも深く進む
+  int depth[2];
+  for (int k = 0; k < 2; k++) {
+    reset_game(3);
+    memset(s_equip, 0, sizeof(s_equip));
+    s_equip[SLOT_WEAPON] = make_item(SH_CLAYMORE, 40);   // 戦闘で死なないように
+    s_equip[SLOT_BODY] = make_item(SH_FULL_PLATE, 40);
+    if (k == 1) {
+      Item greaves = special_item(find_special("Ashwalk Greaves"), 45);
+      wear(&greaves);
+    }
+    s_hero.auto_return_pct = 0;
+    game_depart(0);
+    pctest_steps_today += 1000;
+    game_update();
+    depth[k] = (int)s_run.depth;
+  }
+  printf("  1000 steps: depth %d without Stride, %d with Stride +20%%\n", depth[0], depth[1]);
+  check(depth[1] > depth[0], "Stride moves the hero further");
+
+  // ボスの固有装備
+  reset_game(17);
+  int boss_uniques = 0;
+  for (int i = 0; i < 400; i++) {
+    memset(s_bag, 0, sizeof(s_bag));
+    found_boss_loot(0, 5);
+    int sp = game_item_special(&s_bag[0]);
+    boss_uniques += sp >= 0 && g_specials[sp].boss;
+  }
+  printf("  Rat King dropped his crown %d times in 400 kills\n", boss_uniques);
+  check(boss_uniques > 20 && boss_uniques < 110, "boss uniques drop about 15% of the time");
+
+  // 普通のドロップでボス専用の物は出ない。ホームのダンジョンの物が出やすい
+  int home = 0, total = 0, boss_only = 0;
+  for (int i = 0; i < 20000; i++) {
+    int sp = pick_special(2, false);
+    if (sp < 0) continue;
+    total++;
+    home += g_specials[sp].dungeon == 2;
+    boss_only += g_specials[sp].boss;
+  }
+  printf("  uniques rolled in Sunken Crypt: %d%% from the Crypt itself\n", home * 100 / total);
+  check(boss_only == 0, "boss uniques never come from ordinary drops");
+  check(home * 100 / total > 40, "a dungeon's own uniques are the most common there");
 }
 
 static void test_return_trip(void) {
@@ -227,7 +400,7 @@ static void test_stash(void) {
 
   // 保存して読み直しても残る（2つのキーにまたがる位置も）
   memset(s_stash, 0, sizeof(s_stash));
-  for (int i = 0; i < STASH_SIZE; i++) s_stash[i] = make_item(i % g_base_count, 1 + i);
+  for (int i = 0; i < STASH_SIZE; i++) s_stash[i] = make_item(i % SHAPE_COUNT, 1 + i);
   game_save();
   memset(s_stash, 0, sizeof(s_stash));
   game_init();
@@ -288,38 +461,52 @@ static void test_blacksmith(void) {
 static void test_codex(void) {
   puts("Codex");
   reset_game(44);
-  check(game_codex_seen(0) && game_codex_seen(3), "starting gear is in the codex");
+  Item sword = make_item(SH_SHORT_SWORD, 1), tunic = make_item(SH_TUNIC, 1);
+  check(game_codex_seen(sword.base - 1) && game_codex_seen(tunic.base - 1), "starting gear is in the codex");
   int before = game_codex_seen_count();
 
-  Item amulet = make_item(6, 5);
+  Item amulet = make_item(SH_LOCKET, 5);
   bag_add(&amulet);
-  check(game_codex_seen(6) && game_codex_seen_count() == before + 1, "picking up an item records it");
+  check(game_codex_seen(amulet.base - 1) && game_codex_seen_count() == before + 1,
+        "picking up an item records it");
+  char name[32];
+  game_codex_name(amulet.base - 1, name, sizeof(name));
+  check(strcmp(name, "Bone Locket") == 0, "codex names read material + shape");
 
-  // 固有装備は鑑定するまで名前が載らない
-  int special = -1;
-  for (int i = 0; i < g_special_count; i++) if (!g_specials[i].set_id) { special = i; break; }
-  Item uniq = make_item(g_specials[special].base, 30);
-  uniq.rarity = RARITY_UNIQUE;
-  uniq.flags = (uint8_t)(special << ITEM_SPECIAL_SHIFT);   // 未鑑定
+  // 固有装備は鑑定するまで載らない。ログにも正体は出ない
+  int special = find_special("Ratcatcher");
+  Item uniq = make_special_item(special, 5);
   memset(s_bag, 0, sizeof(s_bag));
   bag_add(&uniq);
-  check(!game_codex_seen(g_base_count + special), "an unidentified unique stays ???");
+  check(!game_codex_seen(BASE_COUNT + special), "an unidentified unique stays ???");
+  game_item_short_name(&uniq, name, sizeof(name));
+  check(strcmp(name, "Bronze Knife") == 0, "an unidentified unique shows its base name");
+  check(visible_base(&uniq) == SH_KNIFE * TIER_COUNT, "logs hide an unidentified unique");
   s_hero.scrolls_id = 1;
   game_identify_with_scroll(0);
-  check(game_codex_seen(g_base_count + special), "identifying reveals it");
+  check(game_codex_seen(BASE_COUNT + special), "identifying reveals it");
+  game_item_short_name(&s_bag[0], name, sizeof(name));
+  check(strcmp(name, "Ratcatcher") == 0, "identified uniques show their own name");
 
   game_save();
   memset(s_codex, 0, sizeof(s_codex));
   game_init();
-  check(game_codex_seen(g_base_count + special), "the codex survives a reload");
+  check(game_codex_seen(BASE_COUNT + special), "the codex survives a reload");
 
   // 図鑑のない古いセーブは、持ち物から作り直す
   persist_delete(KEY_CODEX);
   game_init();
-  // 装備（初期装備）と持ち物（鑑定済みの固有装備）からは載り、手放したお守りは載らない
-  check(game_codex_seen(0) && game_codex_seen(g_base_count + special) && !game_codex_seen(6),
+  check(game_codex_seen(sword.base - 1) && game_codex_seen(BASE_COUNT + special) &&
+            !game_codex_seen(amulet.base - 1),
         "old saves rebuild the codex from what is carried");
   printf("  codex: %d / %d entries\n", game_codex_seen_count(), game_codex_size());
+
+  // 保存形式が古いセーブ（version 1）はリセットする
+  s_hero.version = 1;
+  s_hero.level = 30;
+  game_save();
+  game_init();
+  check(s_hero.version == SAVE_VERSION && s_hero.level == 1, "version 1 saves start over");
 
   // 保存領域の合計（Pebble は約4KB まで）
   int total = 0;
@@ -375,6 +562,7 @@ static void test_play_balance(void) {
 }
 
 int main(void) {
+  test_catalog();
   test_rarity_distribution();
   test_affixes();
   test_stats_and_price();

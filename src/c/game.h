@@ -41,28 +41,21 @@ typedef enum {
 } Rarity;
 
 #define ITEM_FLAG_IDENTIFIED 0x01
-// セット・固有装備の番号（g_specials の添字）を flags の上位ビットに入れる
-#define ITEM_SPECIAL_SHIFT 1
-#define ITEM_SPECIAL_MASK 0x7E
 #define MAX_AFFIXES 4
 #define MAX_PLUS 10
 
 // ---- アイテム（保存形式。1個8バイト） ----
 //   性能は base・seed・ilvl から毎回計算する（保存領域が小さいため）
 typedef struct {
-  uint16_t base;     // 基本アイテムの番号 + 1（0 は空）
+  uint16_t base;     // 1〜900: 形×素材、901〜: 固有・セット装備（0 は空）。items.h 参照
   uint16_t seed;     // 接辞と性能のばらつきの元
   uint8_t ilvl;      // アイテムレベル
   uint8_t rarity;    // Rarity
-  uint8_t flags;     // 鑑定済み + セット/固有装備の番号
+  uint8_t flags;     // ITEM_FLAG_IDENTIFIED
   uint8_t plus;      // 強化段階（0〜MAX_PLUS）
 } Item;
 
-typedef struct {
-  const char *name;
-  uint8_t slot;      // EquipSlot（指輪は SLOT_RING1）
-  uint8_t icon;      // items.png の番号
-} BaseDef;
+#include "items.h"
 
 // ---- 接辞（seed から決まる。名前と性能の両方に効く） ----
 typedef enum { AFFIX_ATK, AFFIX_DEF, AFFIX_HP } AffixStat;
@@ -72,15 +65,6 @@ typedef struct {
   uint8_t stat;      // AffixStat
   uint8_t power;     // 強さ（100 = 標準）
 } AffixDef;
-
-// ---- セット・固有装備 ----
-typedef struct {
-  const char *name;
-  uint8_t base;      // 基本アイテムの番号
-  uint8_t bonus_pct; // 基本性能の倍率（%）
-  int16_t atk, def, hp;   // 追加の性能（アイテムレベルによらない）
-  uint8_t set_id;    // 0 = 固有装備、1以上 = セット番号
-} SpecialDef;
 
 typedef struct {
   int16_t atk;
@@ -98,8 +82,6 @@ typedef struct {
 } DungeonDef;
 
 extern const DungeonDef g_dungeons[DUNGEON_COUNT];
-extern const BaseDef g_bases[];
-extern const int g_base_count;
 extern const char *const g_slot_names[EQUIP_SLOTS];
 
 // ---- 冒険の状態 ----
@@ -201,14 +183,15 @@ extern const AffixDef g_prefixes[];
 extern const int g_prefix_count;
 extern const AffixDef g_suffixes[];
 extern const int g_suffix_count;
-extern const SpecialDef g_specials[];
-extern const int g_special_count;
 
 // 未鑑定なら基本性能だけ、鑑定済みなら接辞と強化も含めた性能
 ItemStats game_item_stats(const Item *it);
-const BaseDef *game_item_base(const Item *it);
-int game_item_price(const Item *it);        // 売値
-// 接辞・セット・固有装備を含めた名前（未鑑定なら基本アイテム名のまま）
+const ShapeDef *game_item_shape(const Item *it);   // 空なら NULL
+int game_item_tier(const Item *it);                // 素材の段階 0〜5
+int game_item_price(const Item *it);               // 売値
+// 一覧用の短い名前: 「素材 + 形」か、鑑定済みの固有・セット装備の名前
+void game_item_short_name(const Item *it, char *buf, size_t size);
+// 詳細画面用の長い名前: 強化段階と接辞も含む（未鑑定なら短い名前と同じ）
 void game_item_name(const Item *it, char *buf, size_t size);
 bool game_item_identified(const Item *it);
 int game_item_special(const Item *it);      // g_specials の添字。なければ -1
@@ -217,6 +200,11 @@ int game_item_affix_count(const Item *it);
 const AffixDef *game_item_affix(const Item *it, int i, int *value);
 // 同じセットの装備を何個つけているか（セット装備でなければ 0）
 int game_set_pieces_equipped(const Item *it);
+const SetDef *game_item_set(const Item *it);       // セット装備でなければ NULL
+// 装備中の物すべてから得ている特殊効果の合計（上限つき）
+int game_effect_total(Effect fx);
+// 効果の表示用の文字列（"Stride +10%" など）
+void game_effect_text(Effect fx, int value, char *buf, size_t size);
 
 const Item *game_equipped(int slot);
 const Item *game_bag(int i);
@@ -263,7 +251,7 @@ UpgradeResult game_upgrade_bag(int bag_index);
 int game_codex_size(void);
 int game_codex_seen_count(void);
 bool game_codex_seen(int i);
-const char *game_codex_name(int i);
+void game_codex_name(int i, char *buf, size_t size);
 int game_codex_icon(int i);
 int game_codex_rarity(int i);
 

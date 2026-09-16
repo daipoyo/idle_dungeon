@@ -58,10 +58,11 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     gfx_draw_row(ctx, cell, &row);
     return;
   }
-  const BaseDef *b = game_item_base(it);
+  static char name[32];
   int fee = game_identify_fee(it);
-  row.icon = b->icon;
-  row.title = b->name;   // 鑑定するまで本当の名前は分からない
+  row.icon = game_item_shape(it)->icon;
+  game_item_short_name(it, name, sizeof(name));   // 鑑定するまで本当の名前は分からない
+  row.title = name;
   row.tint_title = true;
   row.title_color = gfx_rarity_color(it);
   snprintf(sub, sizeof(sub), "Fee %dG", fee);
@@ -88,6 +89,11 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
   after_identify(game_identify_with_gold(bag));
 }
 
+static void select_long_click(MenuLayer *menu, MenuIndex *index, void *data) {
+  int bag = unident_index(index->row);
+  if (bag >= 0) item_window_push(ITEM_AT_BAG, bag, false);
+}
+
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   gfx_items_acquire();
@@ -100,6 +106,7 @@ static void window_load(Window *window) {
     .get_cell_height = get_cell_height,
     .draw_row = draw_row,
     .select_click = select_click,
+    .select_long_click = select_long_click,
   });
   gfx_setup_menu(s_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_menu));

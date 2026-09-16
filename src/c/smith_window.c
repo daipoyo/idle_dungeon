@@ -138,6 +138,14 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
   menu_layer_reload_data(menu);
 }
 
+static void select_long_click(MenuLayer *menu, MenuIndex *index, void *data) {
+  if (index->section == 0 && equipped_slot(index->row) >= 0) {
+    item_window_push(ITEM_AT_EQUIP, equipped_slot(index->row), false);
+  } else if (index->section == 1 && game_bag(index->row)) {
+    item_window_push(ITEM_AT_BAG, index->row, false);
+  }
+}
+
 static void selection_changed(MenuLayer *menu, MenuIndex new_index, MenuIndex old_index,
                               void *data) {
   // 別の行へ動いたら、確認も結果の文言も消す
@@ -162,6 +170,7 @@ static void window_load(Window *window) {
     .get_cell_height = get_cell_height,
     .draw_row = draw_row,
     .select_click = select_click,
+    .select_long_click = select_long_click,
     .selection_changed = selection_changed,
   });
   gfx_setup_menu(s_menu, window);

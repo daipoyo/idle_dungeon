@@ -64,6 +64,11 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
   menu_layer_reload_data(menu);
 }
 
+static void select_long_click(MenuLayer *menu, MenuIndex *index, void *data) {
+  if (index->section == 0 && game_stash(index->row)) item_window_push(ITEM_AT_STASH, index->row, false);
+  if (index->section == 1 && game_bag(index->row)) item_window_push(ITEM_AT_BAG, index->row, false);
+}
+
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   gfx_items_acquire();
@@ -76,6 +81,7 @@ static void window_load(Window *window) {
     .get_cell_height = get_cell_height,
     .draw_row = draw_row,
     .select_click = select_click,
+    .select_long_click = select_long_click,
   });
   gfx_setup_menu(s_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_menu));

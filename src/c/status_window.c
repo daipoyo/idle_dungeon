@@ -114,37 +114,22 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     }
   }
   static char name[40];
-  const BaseDef *b = game_item_base(it);
-  row.icon = b->icon;
-  game_item_name(it, name, sizeof(name));
-  row.title = name;
-  row.tint_title = true;
-  row.title_color = gfx_rarity_color(it);
-  gfx_item_stat_text(it, sub, sizeof(sub));
-  row.sub = sub;
+  gfx_item_row(&row, it, name, sizeof(name), sub, sizeof(sub));
   if (!game_item_identified(it)) {
     // 未鑑定は巻物で鑑定できる。持っていなければ町の鑑定屋へ
-    snprintf(sub, sizeof(sub), game_identify_scrolls() ? "Unidentified - SELECT" : "Unidentified");
+    snprintf(sub, sizeof(sub), "Unidentified");
     row.warn_sub = true;
   }
   gfx_draw_row(ctx, cell, &row);
 }
 
+// 選ぶと詳細を開く。装備・取り外し・巻物での鑑定は詳細画面で行う
 static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
-  if (index->section == 0) return;
-  bool ok;
-  if (index->section == 1) {
-    ok = game_unequip(index->row);
-  } else if (!game_item_identified(game_bag(index->row))) {
-    ok = game_identify_with_scroll(index->row) == IDENT_OK;   // 巻物で鑑定
-  } else {
-    ok = game_equip_from_bag(index->row);
+  if (index->section == 1 && game_equipped(index->row)) {
+    item_window_push(ITEM_AT_EQUIP, index->row, true);
+  } else if (index->section == 2 && game_bag(index->row)) {
+    item_window_push(ITEM_AT_BAG, index->row, true);
   }
-  if (!ok) {
-    vibes_short_pulse();
-    return;
-  }
-  menu_layer_reload_data(s_menu);
 }
 
 static void window_load(Window *window) {

@@ -248,8 +248,8 @@ void gfx_draw_item_icon(GContext *ctx, int item_id, int x, int y) {
 }
 
 void gfx_draw_item(GContext *ctx, const Item *it, int x, int y) {
-  const BaseDef *b = game_item_base(it);
-  if (b) gfx_draw_item_icon(ctx, b->icon, x, y);
+  const ShapeDef *sh = game_item_shape(it);
+  if (sh) gfx_draw_item_icon(ctx, sh->icon, x, y);
 }
 
 GColor gfx_rarity_color(const Item *it) {
@@ -265,11 +265,17 @@ GColor gfx_rarity_color(const Item *it) {
 
 void gfx_item_row(RowSpec *row, const Item *it, char *name, size_t name_size, char *sub,
                   size_t sub_size) {
-  const BaseDef *b = game_item_base(it);
-  if (!b) return;
-  row->icon = b->icon;
-  game_item_name(it, name, name_size);
+  const ShapeDef *sh = game_item_shape(it);
+  if (!sh) return;
+  row->icon = sh->icon;
+  // 一覧は短い名前。接辞まで含めた名前は詳細画面で出す
+  game_item_short_name(it, name, name_size);
   row->title = name;
+  static char plus[6];
+  if (it->plus) {
+    snprintf(plus, sizeof(plus), "+%d", it->plus);
+    row->right = plus;
+  }
   row->tint_title = true;
   row->title_color = gfx_rarity_color(it);
   gfx_item_stat_text(it, sub, sub_size);

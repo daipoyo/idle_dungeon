@@ -292,13 +292,14 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
       row.warn_sub = game_gold() < IDENT_SCROLL_PRICE;
     } else {
       int i = index->row - BUY_GEAR_FIRST;
+      static char name[32];
       Item it = game_shop_gear(i);
-      const BaseDef *b = game_item_base(&it);
       char stats[24];
       gfx_item_stat_text(&it, stats, sizeof(stats));
       int cost = game_shop_gear_cost(i);
-      row.icon = b->icon;
-      row.title = b->name;
+      row.icon = game_item_shape(&it)->icon;
+      game_item_short_name(&it, name, sizeof(name));
+      row.title = name;
       snprintf(sub, sizeof(sub), "%dG %s", cost, stats);
       row.warn_sub = game_gold() < cost;
       right[0] = '\0';
@@ -313,15 +314,12 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
       row.dim = true;
     } else {
       static char name[40];
-      const BaseDef *b = game_item_base(it);
-      row.icon = b->icon;
-      game_item_name(it, name, sizeof(name));
-      row.title = name;
-      row.tint_title = true;
-      row.title_color = gfx_rarity_color(it);
+      static char stats[24];
+      gfx_item_row(&row, it, name, sizeof(name), stats, sizeof(stats));
       snprintf(sub, sizeof(sub), game_item_identified(it) ? "Sell %dG" : "Sell %dG (unident.)",
                game_item_price(it));
       row.sub = sub;
+      row.warn_sub = false;
     }
   }
   gfx_draw_row(ctx, cell, &row);
@@ -351,6 +349,17 @@ static void list_select(MenuLayer *menu, MenuIndex *index, void *data) {
   layer_mark_dirty(s_list_header);
 }
 
+// 長押しで品物の詳細（買う前・売る前に中身を確かめる）
+static void list_long_select(MenuLayer *menu, MenuIndex *index, void *data) {
+  if (s_mode == LIST_BUY) {
+    if (index->row < BUY_GEAR_FIRST) return;
+    Item it = game_shop_gear(index->row - BUY_GEAR_FIRST);
+    item_window_push_copy(&it);
+  } else if (game_bag(index->row)) {
+    item_window_push(ITEM_AT_BAG, index->row, false);
+  }
+}
+
 static void list_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
@@ -369,6 +378,7 @@ static void list_window_load(Window *window) {
     .get_cell_height = list_cell_height,
     .draw_row = list_draw_row,
     .select_click = list_select,
+    .select_long_click = list_long_select,
   });
   gfx_setup_menu(s_list_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_list_menu));

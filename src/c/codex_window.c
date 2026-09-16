@@ -41,8 +41,10 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   snprintf(sub, sizeof(sub), "No.%03d %s", i + 1, rarity == RARITY_NORMAL ? "" : g_rarity_names[rarity]);
   row.sub = sub;
   if (game_codex_seen(i)) {
+    static char name[32];
+    game_codex_name(i, name, sizeof(name));
     row.icon = game_codex_icon(i);
-    row.title = game_codex_name(i);
+    row.title = name;
     row.tint_title = true;
     row.title_color = rarity_color(rarity);
   } else {
