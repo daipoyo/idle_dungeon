@@ -60,6 +60,8 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
 void gfx_draw_item(GContext *ctx, const Item *it, int x, int y);
 // 大きく描く（dot = ドット1個のピクセル数。詳細画面では PX * 2）
 void gfx_draw_item_scaled(GContext *ctx, const Item *it, int x, int y, int dot);
+// 影だけを1色で描く（図鑑のまだ見つけていない物）
+void gfx_draw_item_silhouette(GContext *ctx, const Item *it, int x, int y, GColor color);
 // 画面用のアイコン（UI_ICON_*。ITEM_ICON_SIZE 四方）
 void gfx_draw_ui_icon(GContext *ctx, int icon, int x, int y);
 // 固有・セット装備の飾り: アイコンの四隅の枠（金・緑）と、角で瞬くきらめき。

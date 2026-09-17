@@ -321,6 +321,18 @@ void gfx_draw_item(GContext *ctx, const Item *it, int x, int y) {
   gfx_draw_item_scaled(ctx, it, x, y, PX);
 }
 
+void gfx_draw_item_silhouette(GContext *ctx, const Item *it, int x, int y, GColor color) {
+  const ShapeDef *sh = game_item_shape(it);
+  if (!sh) return;
+  int special = game_item_special(it);
+  int icon = special >= 0 ? ITEM_ICON_SPECIAL_FIRST + special : (int)(sh - g_shapes);
+  uint8_t rec[ITEM_ICON_RECORD];
+  GColor pal[7];
+  if (!load_icon_record(icon, rec, pal)) return;
+  for (int i = 1; i < 7; i++) pal[i] = color;
+  draw_icon_record(ctx, rec, pal, x, y, PX);
+}
+
 void gfx_draw_ui_icon(GContext *ctx, int icon, int x, int y) {
   uint8_t rec[ITEM_ICON_RECORD];
   GColor pal[7];
