@@ -605,3 +605,128 @@ def keeper_face():
     """一覧画面の見出しに出す顔 (22x22)。上半身の絵の上側を切り出す。"""
     bust = keeper_bust()
     return [row[3:25] for row in bust[0:22]]
+
+
+# ============================================================
+# 施設の人物の顔 (22x22)。左半分を描いて左右反転でつなぎ、左右で違うところだけ上書きする
+#   K 輪郭  e 肌  s 肌の影  あとは pebble_art.PAL の色
+# ============================================================
+FACE_HALVES = {
+    # 鍛冶屋: 赤い鉢巻き、太い眉、茶色のひげ、革の前掛け
+    'smith': [
+        "........KKK",
+        "......KKeee",
+        ".....Keeeee",
+        "....KRRRRRR",
+        "....KRRRRRR",
+        "....Keeeeee",
+        "...KeKKKKee",
+        "...KeeeKKee",
+        "...Kseeeeee",
+        "...Kseeeees",
+        "...Kseooooo",
+        "...Kooooooo",
+        "...Kooobooo",
+        "...Kooooooo",
+        "....Kooooob",
+        ".....Kooooo",
+        "..KKKKKoooo",
+        ".KvvvvvKkkk",
+        "KvvvvvKkkkk",
+        "KvvvvKkkkkk",
+        "KvvvvKkkkkk",
+        "KvvvvKkkkkk",
+    ],
+    # 鑑定屋: はげ頭に白い横髪と長い白ひげ、紫のローブ（片眼鏡はあとから右目に描く）
+    'appraiser': [
+        "......KKKKK",
+        "....KKeeeee",
+        "...Keeeeeee",
+        "..KWKeeeeee",
+        "..KWWeeeeee",
+        "..KWeKKKeee",
+        "..KWeeKKeee",
+        "..KWseeeeee",
+        "...Kseeeees",
+        "...KseWWWWW",
+        "...KWWWWWWW",
+        "...KWWWWWWW",
+        "....KWWWWWW",
+        ".....KWWWWW",
+        "......KWWWW",
+        "...KKKKKWWW",
+        "..KxxxxxKWW",
+        ".KxxxxxxxKW",
+        ".KxxxxxxxxK",
+        "KxxxxYxxxxx",
+        "KxxxxYxxxxx",
+        "KxxxxYxxxxx",
+    ],
+    # 倉庫番: 青いバンダナの元気な店番、そばかす、前掛け
+    'stash': [
+        ".......KKKK",
+        ".....KKUUUU",
+        "....KUUUUUU",
+        "...KUUUUWUU",
+        "...KUUUUUUU",
+        "...KoKKKKKK",
+        "..Kooeeeeee",
+        "..KoeeKKeee",
+        "..KoeeKKeee",
+        "..Koeseeeee",
+        "...KeeseSee",
+        "...KeeeeeKK",
+        "....Keeeeee",
+        ".....KKeeee",
+        "......Keeee",
+        "....KKKKeee",
+        "...KUUUUKll",
+        "..KUUUUUKll",
+        ".KUUUUUUKll",
+        ".KUUUUUKlll",
+        "KUUUUUUKlll",
+        "KUUUUUUKlll",
+    ],
+    # 回収代行業者: 深緑のフード、口元を覆う赤いスカーフ、革の胸当て
+    'agent': [
+        ".......KKKK",
+        ".....KKdddd",
+        "....Kdddddd",
+        "...KddGGGGG",
+        "..KddGKKKKK",
+        "..KdGKeeeee",
+        "..KdGKeeeee",
+        ".KddGKeKKee",
+        ".KddGKeeeee",
+        ".KddGKeeees",
+        ".KddGKrrrrr",
+        ".KddGKrrrrr",
+        ".KdddKrrRrr",
+        ".KdddKrrrrr",
+        ".KddddKrrrr",
+        "KddddddKrrr",
+        "KddddddKkkk",
+        "KdddddKkkkk",
+        "KdddddKkkok",
+        "KdddddKkkok",
+        "KddddKkkkok",
+        "KddddKkkkok",
+    ],
+}
+
+
+def npc_face(name):
+    half = FACE_HALVES[name]
+    check(half, 11, 22, 'face_' + name)
+    rows = [list(r + r[::-1]) for r in half]
+    if name == 'appraiser':
+        # 右目（反転した側）に金の片眼鏡と、下に垂れる鎖
+        for x, y in ((13, 5), (16, 5), (12, 6), (17, 6), (13, 7), (16, 7), (14, 4), (15, 4), (14, 8), (15, 8)):
+            rows[y][x] = 'Y'
+        for y in range(9, 14):
+            rows[y][17] = 'Y'
+    return [[None if ch == '.' else ch for ch in r] for r in rows]
+
+
+def npc_faces():
+    return {name: npc_face(name) for name in FACE_HALVES}

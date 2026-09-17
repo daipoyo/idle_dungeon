@@ -196,14 +196,12 @@ def main():
     fills['bg_town'] = gb_scenes.top_color(town)
     out('bg_town.png', scenes['bg_town'])
 
-    # --- お店（機種ごとに画面と同じ大きさ）と店主の顔 ---
-    shop = {}
-    for plat, (w, h, dlg_h) in gb_scenes.SHOP_SCREENS.items():
-        shop[plat] = grid_image(gb_scenes.shop_scene(w // PX, h // PX, (h - dlg_h) // PX))
-        out('shop_scene~%s.png' % plat, shop[plat])
-    out('shop_scene.png', shop['basalt'])
-    face = grid_image(gb_sprites.keeper_face())
-    out('keeper_face.png', face)
+    # --- 施設の人物の顔（一覧の見出しに出す） ---
+    faces = {'keeper': grid_image(gb_sprites.keeper_face())}
+    out('keeper_face.png', faces['keeper'])
+    for name, grid in gb_sprites.npc_faces().items():
+        faces[name] = grid_image(grid)
+        out('face_%s.png' % name, faces[name])
 
     # --- 勇者・武器・フォント（Cヘッダ） ---
     frames = gb_sprites.hero_frames()
@@ -220,7 +218,7 @@ def main():
         print('%-22s %3dx%-3d colors=%d' % (name, size[0], size[1], n))
 
     if preview_dir:
-        write_previews(preview_dir, enemies, chests, scenes, shop, face, frames, weapons)
+        write_previews(preview_dir, enemies, chests, scenes, faces, frames, weapons)
         gb_items.preview(ROOT, PAL, preview_dir, new_image, upscale)
 
 
@@ -336,7 +334,7 @@ def hero_gear_preview(d, frames, weapons):
     out.save(os.path.join(d, 'pv_hero_gear.png'))
 
 
-def write_previews(d, enemies, chests, scenes, shop, face, frames, weapons):
+def write_previews(d, enemies, chests, scenes, faces, frames, weapons):
     gray = (0x55, 0x55, 0x55)
     flat = []
     for a, b in enemies:
@@ -347,13 +345,10 @@ def write_previews(d, enemies, chests, scenes, shop, face, frames, weapons):
         img = scenes['bg_dungeon%d' % i]
         upscale(sheet([img, img], 2, img.width, img.height), 2).save(os.path.join(d, 'pv_bg_dungeon%d.png' % i))
     upscale(scenes['bg_town'], 2).save(os.path.join(d, 'pv_bg_town.png'))
-    row = new_image(sum(s.width + 8 for s in shop.values()), 260)
-    x = 0
-    for s in shop.values():
-        row.alpha_composite(s, (x, 0))
-        x += s.width + 8
-    upscale(on_bg(row, gray), 2).save(os.path.join(d, 'pv_shop.png'))
-    upscale(on_bg(face, gray), 4).save(os.path.join(d, 'pv_face.png'))
+    row = new_image(len(faces) * 52, 44)
+    for i, img in enumerate(faces.values()):
+        row.alpha_composite(img, (i * 52, 0))
+    upscale(on_bg(row, gray), 4).save(os.path.join(d, 'pv_faces.png'))
     fimg = gb_font.preview()
     upscale(fimg, 4).save(os.path.join(d, 'pv_font.png'))
 

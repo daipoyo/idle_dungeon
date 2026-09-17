@@ -1,22 +1,13 @@
 # -*- coding: utf-8 -*-
-"""背景（ダンジョン6種・町・店内）のドット絵。単位はドット（画面では2倍）。
+"""背景（ダンジョン6種・町）のドット絵。単位はドット（画面では2倍）。
 
 ダンジョンの背景は横に繰り返し表示され、遠景（上64ドット）と地面（下8ドット）が
 別々の速さで流れる。そのため左端と右端がつながるように描く（座標は横方向に折り返す）。
 """
 from pebble_art import hash2
-from gb_sprites import keeper_bust
 
 TILE_W, FAR_H, GROUND_H = 64, 64, 8
 TOWN_W, TOWN_H = 130, 56
-
-# 店の画面: 機種名 -> (画面幅, 画面高, 会話ウィンドウの高さ)。shop_window.c と揃える
-SHOP_SCREENS = {
-    'basalt': (144, 168, 56),
-    'chalk': (180, 180, 61),
-    'emery': (200, 228, 72),
-    'gabbro': (260, 260, 88),
-}
 
 
 class Grid:
@@ -352,59 +343,4 @@ def town():
         cv.px(tx, base - 9, 'j')
     # 石畳
     ground_tiles(cv, TOWN_H - GROUND_H, ('K', 'k', 'g', 'W'), tw=6, seed=51)
-    return cv.g
-
-
-# ------------------------------------------------------------
-# 店内（機種ごとの画面いっぱいの絵）
-# ------------------------------------------------------------
-POTION = ["..0..", ".000.", "01120", "01220", ".000."]
-SWORD_WALL = [".K.", "KWK", "KgK", "KgK", "KgK", "yyy", ".o.", ".o."]
-
-
-def shop_scene(w, h, visible_h):
-    """w x h ドット。visible_h より下は会話ウィンドウで隠れる。"""
-    cv = Grid(w, h, 'b', wrap=False)
-    # 木の板壁
-    for y in range(h):
-        for x in range(w):
-            if x % 8 == 0:
-                c = 'K'
-            elif x % 8 == 1:
-                c = 'o'
-            elif (y + x * 5) % 13 == 0:
-                c = 'K'
-            else:
-                c = 'b'
-            cv.px(x, y, c)
-    counter_top = visible_h - 10
-    # 棚（左右）
-    for sx in (2, w - 26):
-        for i, sy in enumerate(range(8, counter_top - 6, 14)):
-            cv.rect(sx, sy + 6, 24, 2, 'K')
-            cv.hline(sx, sx + 23, sy + 6, 's')
-            for j in range(3):
-                colors = (('K', 'R', 'W'), ('K', 'B', 'W'), ('K', 'G', 'W'))[(i + j) % 3]
-                cv.blit(sx + 2 + j * 8, sy + 1, POTION, colors)
-    # 壁の剣
-    cv.blit(w // 2 - 10, 4, SWORD_WALL, None)
-    cv.blit(w // 2 + 9, 4, SWORD_WALL, None)
-    # 店主
-    bust = keeper_bust()
-    bw = len(bust[0])
-    bx = (w - bw) // 2
-    by = counter_top - len(bust) + 4
-    for y, row in enumerate(bust):
-        for x, c in enumerate(row):
-            if c is not None:
-                cv.px(bx + x, by + y, c)
-    # カウンター
-    cv.rect(0, counter_top, w, h - counter_top, 'K')
-    cv.rect(0, counter_top + 1, w, 2, 's')
-    cv.rect(0, counter_top + 3, w, h - counter_top - 3, 'o')
-    for x in range(0, w, 12):
-        cv.vline(x, counter_top + 4, h - 1, 'b')
-    # カウンターの上の小物（金貨と水晶玉）
-    cv.blit(bx - 8, counter_top - 3, [".00.", "0120", ".00."], ('K', 'y', 'Y'))
-    cv.blit(bx + bw + 3, counter_top - 5, [".00.", "0120", "0110", ".00."], ('K', 'p', 'H'))
     return cv.g

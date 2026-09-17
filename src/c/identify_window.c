@@ -1,15 +1,29 @@
 #include "ui.h"
 #include "game.h"
 #include "gfx.h"
+#include "npc_header.h"
 
 // ============================================================
 // 鑑定屋
 //   持ち物の中の未鑑定の品を、お金を払って調べてもらう
 //   巻物はダンジョンでも使えるので、持ち物画面（status_window）から使う
+//   上に片眼鏡の老学者の顔とセリフ。鑑定した物のレア度でセリフが変わる
 // ============================================================
 static Window *s_window;
 static MenuLayer *s_menu;
-static const char *s_message;
+static Layer *s_header;
+static const char *s_speech;
+
+static const char *const GREETINGS[] = {
+  "Hmm? Let me see what you found.",
+  "Every relic has a story.",
+  "Bring it closer. My eyes are old.",
+};
+
+static void say(const char *speech) {
+  s_speech = speech;
+  npc_header_say(s_header, speech);
+}
 
 // 未鑑定の品だけを並べる。i 番目の持ち物の位置を返す
 static int unident_index(int i) {
@@ -34,10 +48,6 @@ static int16_t get_header_height(MenuLayer *menu, uint16_t section, void *data) 
 
 static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *data) {
   static char buf[32];
-  if (s_message) {
-    gfx_draw_header(ctx, cell, s_message);
-    return;
-  }
   snprintf(buf, sizeof(buf), "APPRAISER %ldG", (long)game_gold());
   gfx_draw_header(ctx, cell, buf);
 }
@@ -71,14 +81,25 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   gfx_draw_row(ctx, cell, &row);
 }
 
-static void after_identify(IdentResult r) {
+// 鑑定した物（持ち物の bag 番目）に合わせた一言
+static void after_identify(IdentResult r, int bag) {
   switch (r) {
-    case IDENT_OK: s_message = NULL; break;
-    case IDENT_NO_GOLD: s_message = "NOT ENOUGH GOLD"; break;
-    case IDENT_NO_SCROLL: s_message = "NO SCROLLS"; break;
-    case IDENT_NONE: return;
+    case IDENT_OK: {
+      const Item *it = game_bag(bag);
+      int rarity = it ? it->rarity : RARITY_RARE;
+      if (rarity == RARITY_UNIQUE) say("By the stars... a true legend!");
+      else if (rarity == RARITY_SET) say("Part of a set! Find the rest.");
+      else say("Aha. Quite a find, this one.");
+      break;
+    }
+    case IDENT_NO_GOLD:
+      say("My eyes aren't free, friend.");
+      vibes_short_pulse();
+      break;
+    case IDENT_NO_SCROLL:
+    case IDENT_NONE:
+      return;
   }
-  if (r != IDENT_OK) vibes_short_pulse();
   ui_state_changed();
   menu_layer_reload_data(s_menu);
 }
@@ -86,7 +107,8 @@ static void after_identify(IdentResult r) {
 static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
   int bag = unident_index(index->row);
   if (bag < 0) return;
-  after_identify(game_identify_with_gold(bag));
+  // 鑑定すると並びから抜けるので、鑑定した物を先に控えておく
+  after_identify(game_identify_with_gold(bag), bag);
 }
 
 static void select_long_click(MenuLayer *menu, MenuIndex *index, void *data) {
@@ -96,8 +118,11 @@ static void select_long_click(MenuLayer *menu, MenuIndex *index, void *data) {
 
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
-  s_message = NULL;
-  s_menu = menu_layer_create(layer_get_bounds(root));
+  GRect b = layer_get_bounds(root);
+  s_speech = npc_pick(NPC_LINES(GREETINGS), NULL);
+  s_header = npc_header_create(GRect(0, 0, b.size.w, NPC_HEADER_H), RESOURCE_ID_IMG_FACE_APPRAISER, s_speech);
+  layer_add_child(root, s_header);
+  s_menu = menu_layer_create(GRect(0, NPC_HEADER_H, b.size.w, b.size.h - NPC_HEADER_H));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows = get_num_rows,
     .get_header_height = get_header_height,
@@ -114,6 +139,8 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
+  npc_header_destroy(s_header);
+  s_header = NULL;
   window_destroy(window);
   s_window = NULL;
 }

@@ -1,15 +1,38 @@
 #include "ui.h"
 #include "game.h"
 #include "gfx.h"
+#include "npc_header.h"
 
 // ============================================================
 // 保管庫
 //   セクション0: 保管庫の中身 … 選ぶと持ち物へ
 //   セクション1: 持ち物 … 選ぶと保管庫へ
 //   保管庫の物は死んでも失わない
+//   上に倉庫番の顔とセリフ
 // ============================================================
 static Window *s_window;
 static MenuLayer *s_menu;
+static Layer *s_header;
+static const char *s_speech;
+
+static const char *const GREETINGS[] = {
+  "Your things are safe with me!",
+  "Dropping off or picking up?",
+  "Nothing gets lost in my shed!",
+};
+static const char *const STORED[] = {
+  "Tucked away safe!",
+  "Got it. I'll keep an eye on it.",
+};
+static const char *const TAKEN[] = {
+  "Here you go!",
+  "Take good care of it!",
+};
+
+static void say(const char *speech) {
+  s_speech = speech;
+  npc_header_say(s_header, speech);
+}
 
 static uint16_t get_num_sections(MenuLayer *menu, void *data) {
   return 2;
@@ -51,11 +74,17 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
 }
 
 static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
-  bool ok = index->section == 0 ? game_stash_take(index->row) : game_stash_put(index->row);
+  bool take = index->section == 0;
+  bool ok = take ? game_stash_take(index->row) : game_stash_put(index->row);
   if (!ok) {
-    vibes_short_pulse();   // 入れる先がいっぱい
+    // 入れる先がいっぱい（空の行を選んだときは何も言わない）
+    if (take ? game_stash(index->row) != NULL : game_bag(index->row) != NULL) {
+      say(take ? "Your bag's full!" : "No more room here, sorry!");
+      vibes_short_pulse();
+    }
     return;
   }
+  say(take ? npc_pick(NPC_LINES(TAKEN), s_speech) : npc_pick(NPC_LINES(STORED), s_speech));
   // 最後の行を動かしたときは、カーソルを残っている行へ
   int n = get_num_rows(menu, index->section, NULL);
   if (index->row >= n) {
@@ -71,7 +100,11 @@ static void select_long_click(MenuLayer *menu, MenuIndex *index, void *data) {
 
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
-  s_menu = menu_layer_create(layer_get_bounds(root));
+  GRect b = layer_get_bounds(root);
+  s_speech = npc_pick(NPC_LINES(GREETINGS), NULL);
+  s_header = npc_header_create(GRect(0, 0, b.size.w, NPC_HEADER_H), RESOURCE_ID_IMG_FACE_STASH, s_speech);
+  layer_add_child(root, s_header);
+  s_menu = menu_layer_create(GRect(0, NPC_HEADER_H, b.size.w, b.size.h - NPC_HEADER_H));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_sections = get_num_sections,
     .get_num_rows = get_num_rows,
@@ -89,6 +122,8 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
+  npc_header_destroy(s_header);
+  s_header = NULL;
   window_destroy(window);
   s_window = NULL;
 }

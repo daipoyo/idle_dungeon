@@ -450,24 +450,6 @@ uint32_t gfx_enemy_resource(int dungeon) {
   return ids[dungeon];
 }
 
-static GBitmap *s_keeper;
-static int s_keeper_refs;
-
-GBitmap *gfx_keeper_acquire(void) {
-  if (s_keeper_refs++ == 0) {
-    s_keeper = gbitmap_create_with_resource(RESOURCE_ID_IMG_KEEPER_FACE);
-  }
-  return s_keeper;
-}
-
-void gfx_keeper_release(void) {
-  if (s_keeper_refs <= 0) return;
-  if (--s_keeper_refs == 0) {
-    gbitmap_destroy(s_keeper);
-    s_keeper = NULL;
-  }
-}
-
 // ============================================================
 // メニューの行
 // ============================================================

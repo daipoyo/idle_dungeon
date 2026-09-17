@@ -79,9 +79,6 @@ GColor gfx_rarity_color(const Item *it);
 // 敵画像（ENEMY_SIZE 四方 x 2フレーム）のリソースID。番号は背景の絵と同じ
 uint32_t gfx_enemy_resource(int dungeon);
 
-// 店主の顔の画像（共有）
-GBitmap *gfx_keeper_acquire(void);
-void gfx_keeper_release(void);
 
 // メニューの1行（カーソル＋アイコン＋タイトル＋サブテキスト＋右端の短い文字）
 #define ROW_H (IS_LARGE_SCREEN ? 48 : 40)
