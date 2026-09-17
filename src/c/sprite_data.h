@@ -150,3 +150,189 @@ static const char *const WPN_AXE_SWING[5] = {
   "..KKKK55K.",
   "......KK..",
 };
+
+#define WPN_DAGGER_REST_W 6
+#define WPN_DAGGER_REST_H 6
+#define WPN_DAGGER_REST_AX 1
+#define WPN_DAGGER_REST_AY 4
+static const char *const WPN_DAGGER_REST[6] = {
+  "....K.",
+  "...K5K",
+  "..K54K",
+  ".K64K.",
+  ".e6K..",
+  "..K...",
+};
+
+#define WPN_MACE_REST_W 8
+#define WPN_MACE_REST_H 8
+#define WPN_MACE_REST_AX 1
+#define WPN_MACE_REST_AY 6
+static const char *const WPN_MACE_REST[8] = {
+  "....KK..",
+  "...K55K.",
+  "..K5445K",
+  "..K5445K",
+  "..K655K.",
+  ".K6KKK..",
+  ".eK.....",
+  "........",
+};
+
+#define WPN_HAMMER_REST_W 10
+#define WPN_HAMMER_REST_H 9
+#define WPN_HAMMER_REST_AX 2
+#define WPN_HAMMER_REST_AY 7
+static const char *const WPN_HAMMER_REST[9] = {
+  "...KKKKKK.",
+  "..K555555K",
+  "..K544444K",
+  "..K444444K",
+  "...KK6KKK.",
+  "...K6K....",
+  "..K6K.....",
+  "..eK......",
+  "..........",
+};
+
+#define WPN_POLE_REST_W 10
+#define WPN_POLE_REST_H 10
+#define WPN_POLE_REST_AX 2
+#define WPN_POLE_REST_AY 7
+static const char *const WPN_POLE_REST[10] = {
+  "........K.",
+  ".......K5K",
+  "......K54K",
+  ".....K64K.",
+  "....K6KK..",
+  "...K6K....",
+  "..K6K.....",
+  ".KeK......",
+  "K6K.......",
+  ".K........",
+};
+
+#define WPN_STAFF_REST_W 10
+#define WPN_STAFF_REST_H 10
+#define WPN_STAFF_REST_AX 2
+#define WPN_STAFF_REST_AY 7
+static const char *const WPN_STAFF_REST[10] = {
+  ".......KK.",
+  "......K55K",
+  "......K54K",
+  ".....K6KK.",
+  "....K6K...",
+  "...K6K....",
+  "..K6K.....",
+  ".KeK......",
+  "K6K.......",
+  ".K........",
+};
+
+#define WPN_FIST_REST_W 7
+#define WPN_FIST_REST_H 6
+#define WPN_FIST_REST_AX 1
+#define WPN_FIST_REST_AY 4
+static const char *const WPN_FIST_REST[6] = {
+  ".K.K.K.",
+  "K5K5K5K",
+  "K4K4K4K",
+  "K44444K",
+  ".e444K.",
+  "..KKK..",
+};
+
+static const char *const GEAR_HEAD_CLOTH[HERO_MAP_H] = {
+  "..KKKKKK....",
+  ".K778888K...",
+  "K78888888K..",
+  "K788K.......",
+  "K788K.......",
+  "K789K.......",
+  ".K99K.......",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+};
+
+static const char *const GEAR_HEAD_HELM[HERO_MAP_H] = {
+  "..KKKKKK....",
+  ".K778888K...",
+  "K78888888K..",
+  "K788999999K.",
+  "K78K........",
+  "K78K........",
+  ".KK.........",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+};
+
+static const char *const GEAR_HEAD_CROWN[HERO_MAP_H] = {
+  "..7.7.7.7...",
+  "..8j8j8j8...",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+};
+
+static const char *const GEAR_OFF_SHIELD[HERO_MAP_H] = {
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "KKKKK.......",
+  "K8jj9K......",
+  "K8jj9K......",
+  "K8j7j9K.....",
+  "K8jj9K......",
+  ".K8j9K......",
+  "..K99K......",
+  "...KK.......",
+  "............",
+  "............",
+};
+
+static const char *const GEAR_OFF_FOCUS[HERO_MAP_H] = {
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  "............",
+  ".K..........",
+  "K7K.........",
+  "789K........",
+  "K9K.........",
+  ".K..........",
+  "............",
+  "............",
+  "............",
+  "............",
+};

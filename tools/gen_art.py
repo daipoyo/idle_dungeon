@@ -128,6 +128,8 @@ def write_sprite_data(frames, weapons):
         lines.append('#define WPN_%s_AX %d' % (name, ax))
         lines.append('#define WPN_%s_AY %d' % (name, ay))
         c_rows(lines, 'WPN_' + name, rows, str(len(rows)))
+    for name, rows in gb_sprites.gear_overlays().items():
+        c_rows(lines, 'GEAR_' + name, rows, 'HERO_MAP_H')
     write_file('sprite_data.h', lines)
 
 
@@ -226,6 +228,118 @@ def main():
         gb_items.preview(ROOT, PAL, preview_dir, new_image, upscale)
 
 
+# 見本の装備（武器, 胴, 頭, 左手）。名前は形の ID、先頭の数字は素材の段階。固有装備は名前で書く
+HERO_LOADOUTS = [
+    ('NO GEAR', None, None, None, None),
+    ('BRONZE', (0, 'SHORT_SWORD'), (0, 'TUNIC'), None, None),
+    ('IRON', (1, 'BATTLE_AXE'), (1, 'CHAIN_MAIL'), (1, 'COIF'), (1, 'ROUND_SHIELD')),
+    ('STEEL', (2, 'HALBERD'), (2, 'FULL_PLATE'), (2, 'GREAT_HELM'), None),
+    ('SILK', (2, 'STAFF'), (2, 'ROBE'), (2, 'HOOD'), (2, 'ORB')),
+    ('EMBER', (3, 'CLAYMORE'), (3, 'FULL_PLATE'), (3, 'HORNED_HELM'), (3, 'TOWER_SHIELD')),
+    ('RIME', (4, 'KATANA'), (4, 'MANTLE'), (4, 'CIRCLET'), None),
+    ('VOID', (5, 'WAR_HAMMER'), (5, 'HALF_PLATE'), (5, 'CROWN'), (5, 'BULWARK')),
+    ('ROGUE', (5, 'KUKRI'), (5, 'JERKIN'), (5, 'BANDANA'), None),
+    ('MONK', (4, 'TALONS'), (4, 'GAMBESON'), None, (4, 'LANTERN')),
+    ('UNIQUE', 'Tidecaller', 'Leviathan Scale', 'Coral Barbute', 'Barnacle Bulwark'),
+    ('UNIQUE', 'Colossus Maul', 'Gatewarden', 'Doomcrown', None),
+]
+
+
+def gear_kind(shape_id, slot):
+    """C 側の gfx_draw_hero と同じ分け方。"""
+    order = [sid for sid, _, _, _ in gb_items.read_catalog(ROOT)[0]]
+    i = order.index(shape_id)
+    at = order.index
+    if slot == 'weapon':
+        for first, kind in (('KNUCKLES', 'FIST'), ('STAFF', 'STAFF'), ('SPEAR', 'POLE'),
+                            ('WAR_HAMMER', 'HAMMER'), ('CLUB', 'MACE'), ('HATCHET', 'AXE'),
+                            ('KNIFE', 'DAGGER')):
+            if i >= at(first):
+                return kind
+        return 'SWORD'
+    if slot == 'head':
+        if i >= at('COIF'):
+            return 'HEAD_HELM'
+        if i >= at('CIRCLET'):
+            return 'HEAD_CROWN'
+        return 'HEAD_CLOTH'
+    return 'OFF_FOCUS' if i >= at('ORB') else 'OFF_SHIELD'
+
+
+def gear_colors(entry):
+    """(形 ID, 暗, 中, 明, 固定色1, 固定色2)。entry は (段階, 形 ID) か固有装備の名前。"""
+    shapes, specials = gb_items.read_catalog(ROOT)
+    if isinstance(entry, tuple):
+        tier, sid = entry
+        fam = [f for s_id, _, _, f in shapes if s_id == sid][0]
+        colors = gb_items.FAMILIES[gb_items.FAMILY_INDEX[fam]][1][tier][1]
+        accents = gb_items.SHAPES[sid][0]
+        return (sid,) + tuple(colors) + tuple(accents)
+    sid = [s_id for name, s_id, _ in specials if name == entry][0]
+    return (sid,) + tuple(gb_items.UNIQUE_COLORS[entry])
+
+
+def hero_gear_preview(d, frames, weapons):
+    """勇者に装備を着せた見本（C 側の gfx_draw_hero と同じ重ね方）。"""
+    idle = dict(frames)['IDLE']
+    overlays = gb_sprites.gear_overlays()
+    cells = []
+    for label, wpn, body, head, off in HERO_LOADOUTS:
+        pal = dict(gb_sprites.HERO_BASE)
+        pal.update(gb_sprites.HERO_NO_ARMOR)
+        if body:
+            _, dark, mid, _, _, _ = gear_colors(body)
+            pal.update({'1': mid, '2': dark})
+        cw, ch = 30, 30
+        im = new_image(cw, ch)
+        ox, oy = 8, 10
+
+        def paste(rows, mapping, x, y):
+            grid = [[mapping.get(c, c) if c != '.' else None for c in r] for r in rows]
+            im.alpha_composite(grid_image(grid, 1), (x, y))
+
+        paste(idle, pal, ox, oy)
+        if off:
+            sid, dark, mid, light, a1, _ = gear_colors(off)
+            paste(overlays[gear_kind(sid, 'off')],
+                  dict(pal, **{'7': light, '8': mid, '9': dark, 'j': a1}), ox, oy)
+        if head:
+            sid, dark, mid, light, a1, _ = gear_colors(head)
+            paste(overlays[gear_kind(sid, 'head')], dict(pal, **{'7': light, '8': mid, '9': dark, 'j': a1}), ox, oy)
+        if wpn:
+            sid, dark, mid, light, a1, _ = gear_colors(wpn)
+            kind = gear_kind(sid, 'weapon')
+            wrows = weapons[kind + '_REST']
+            hx, hy = gb_sprites.hero_hand(idle)
+            ax, ay = gb_sprites.weapon_anchor(wrows)
+            paste(wrows, dict(pal, **{'4': mid, '5': light, '6': a1}), ox + hx - ax, oy + hy - ay)
+        cells.append((label, im))
+    cols = 6
+    scale = 6
+    label_h = 9
+    out = new_image(cols * 30 * scale, ((len(cells) + cols - 1) // cols) * (30 * scale + label_h * 2))
+    out.paste((0, 0, 0, 255), (0, 0, out.width, out.height))
+    for i, (label, im) in enumerate(cells):
+        x = (i % cols) * 30 * scale
+        y = (i // cols) * (30 * scale + label_h * 2)
+        bg = new_image(30, 30)
+        bg.paste(PAL['t'] + (255,), (0, 0, 30, 30))
+        bg.paste(PAL['d'] + (255,), (0, 27, 30, 30))
+        bg.alpha_composite(im, (0, 0))
+        out.alpha_composite(upscale(bg, scale), (x, y))
+        # ラベル（ドットフォントを2倍で）
+        tx = x + 6
+        for chx in label:
+            w, bits = gb_font.encode(chx)
+            for gy, v in enumerate(bits):
+                for gx in range(w):
+                    if v >> gx & 1:
+                        out.paste((255, 255, 255, 255), (tx + gx * 2, y + 30 * scale + 3 + gy * 2,
+                                                         tx + gx * 2 + 2, y + 30 * scale + 5 + gy * 2))
+            tx += (w + 1) * 2
+    out.save(os.path.join(d, 'pv_hero_gear.png'))
+
+
 def write_previews(d, icons, enemies, chests, scenes, shop, face, frames, weapons):
     gray = (0x55, 0x55, 0x55)
     upscale(on_bg(sheet(icons, 8, 16, 16), (0, 0, 0)), 4).save(os.path.join(d, 'pv_items.png'))
@@ -233,25 +347,7 @@ def write_previews(d, icons, enemies, chests, scenes, shop, face, frames, weapon
     for a, b in enemies:
         flat += [a, b]
     upscale(on_bg(sheet(flat + chests, 4, 24, 24), gray), 4).save(os.path.join(d, 'pv_enemies.png'))
-    # 勇者: 防具5種 x ポーズ4種（武器は防具の番号に合わせて変える）
-    cells = []
-    for ai in range(5):
-        for name, rows in frames:
-            pal = dict(gb_sprites.HERO_BASE)
-            pal.update(gb_sprites.ARMOR_PAL[ai])
-            wi = min(ai, 3)
-            pal.update(gb_sprites.WEAPON_PAL[wi])
-            im = new_image(24, 20)
-            hero = [[pal.get(ch, ch) if ch != '.' else None for ch in r] for r in rows]
-            im.alpha_composite(grid_image(hero, 1), (4, 2))
-            wkey = ('AXE_' if wi == 3 else 'SWORD_') + ('SWING' if name == 'ATTACK' else 'REST')
-            wrows = weapons[wkey]
-            wgrid = [[pal.get(ch, ch) if ch != '.' else None for ch in r] for r in wrows]
-            hx, hy = gb_sprites.hero_hand(rows)
-            ax, ay = gb_sprites.weapon_anchor(wrows)
-            im.alpha_composite(grid_image(wgrid, 1), (4 + hx - ax, 2 + hy - ay))
-            cells.append(im)
-    upscale(on_bg(sheet(cells, 4, 24, 20), (0x55, 0xAA, 0xFF)), 8).save(os.path.join(d, 'pv_hero.png'))
+    hero_gear_preview(d, frames, weapons)
     for i in range(6):
         img = scenes['bg_dungeon%d' % i]
         upscale(sheet([img, img], 2, img.width, img.height), 2).save(os.path.join(d, 'pv_bg_dungeon%d.png' % i))

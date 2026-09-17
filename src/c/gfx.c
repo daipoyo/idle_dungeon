@@ -149,38 +149,72 @@ void gfx_draw_charmap(GContext *ctx, const char *const *rows, int w, int h,
 // 勇者
 // ============================================================
 // 防具ごとの服の色（主・影）。0番は防具なしの緑の服
-static const char ARMOR_COLORS[5][2] = {
-  { 'G', 'd' },
-  { 'l', 'A' },  // Cloth Armor
-  { 'o', 'b' },  // Leather Armor
-  { 'g', 'k' },  // Chain Mail
-  { 'I', 'i' },  // Plate Armor
-};
+// 装備の色（暗・中・明・固定色1・固定色2 の argb）。
+// 素材の色は段階の表から、固有・セット装備は専用の色。未鑑定の物は元の素材の色
+static ResHandle s_item_icons;
 
-// 武器ごとの色（刀身・刀身ハイライト・柄）
-static const char WEAPON_COLORS[4][3] = {
-  { 'v', 'e', 'b' },  // Rusty Sword
-  { 'g', 'W', 'o' },  // Iron Sword
-  { 'u', 'C', 'B' },  // Steel Blade
-  { 'g', 'W', 'o' },  // Battle Axe
-};
+static bool item_colors(const Item *it, uint8_t out[5]) {
+  const ShapeDef *sh = game_item_shape(it);
+  if (!sh) return false;
+  int special = game_item_special(it);
+  bool own = special >= 0 && game_item_identified(it);
+  int icon = own ? ITEM_ICON_SPECIAL_FIRST + special : (int)(sh - g_shapes);
+  if (!s_item_icons) s_item_icons = resource_get_handle(RESOURCE_ID_ITEM_ICONS);
+  uint8_t pal[6];
+  if (resource_load_byte_range(s_item_icons, icon * ITEM_ICON_RECORD, pal, sizeof(pal)) != sizeof(pal)) {
+    return false;
+  }
+  if (own) {
+    memcpy(out, pal + 1, 3);
+  } else {
+    memcpy(out, ITEM_TIER_COLORS[sh->family][game_item_tier(it)], 3);
+  }
+  out[3] = pal[4];
+  out[4] = pal[5];
+  return true;
+}
 
-static void set_lut(uint8_t *lut, char key, char color) {
-  lut[(int)key] = PAL_LUT[(int)color];
+typedef struct {
+  const char *const *map;
+  int w, h, ax, ay;
+} WeaponArt;
+
+#define WEAPON_ART(name) { WPN_##name, WPN_##name##_W, WPN_##name##_H, WPN_##name##_AX, WPN_##name##_AY }
+
+// 武器の系統ごとの絵（形の並びは items.h の SHAPE_LIST の順）
+static WeaponArt weapon_art(int shape, bool swing) {
+  static const WeaponArt SWORD_REST = WEAPON_ART(SWORD_REST), SWORD_SWING = WEAPON_ART(SWORD_SWING);
+  static const WeaponArt AXE_REST = WEAPON_ART(AXE_REST), AXE_SWING = WEAPON_ART(AXE_SWING);
+  static const WeaponArt DAGGER = WEAPON_ART(DAGGER_REST), MACE = WEAPON_ART(MACE_REST);
+  static const WeaponArt HAMMER = WEAPON_ART(HAMMER_REST);
+  static const WeaponArt POLE = WEAPON_ART(POLE_REST), STAFF = WEAPON_ART(STAFF_REST);
+  static const WeaponArt FIST = WEAPON_ART(FIST_REST);
+  if (shape >= SH_KNUCKLES) return FIST;
+  if (shape >= SH_STAFF) return STAFF;
+  if (shape >= SH_SPEAR) return POLE;
+  if (shape >= SH_WAR_HAMMER) return HAMMER;
+  if (shape >= SH_CLUB) return MACE;
+  if (shape >= SH_HATCHET) return swing ? AXE_SWING : AXE_REST;
+  if (shape >= SH_KNIFE) return DAGGER;
+  return swing ? SWORD_SWING : SWORD_REST;
 }
 
 void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool flip) {
   uint8_t lut[128];
   memcpy(lut, PAL_LUT, sizeof(lut));
-  set_lut(lut, 'h', 'o');  // 髪
-  set_lut(lut, 'e', 's');  // 肌
+  lut['h'] = PAL_LUT['o'];  // 髪
+  lut['e'] = PAL_LUT['s'];  // 肌
+  uint8_t c[5];
 
-  // 体の防具のアイテムレベルで服の色を変える（なしは緑の服）
+  // 服: 胴の装備の素材の色（なしは緑の服）
   const Item *armor = game_equipped(SLOT_BODY);
-  int ai = 0;
-  if (armor) ai = armor->ilvl < 10 ? 1 : (armor->ilvl < 22 ? 2 : (armor->ilvl < 35 ? 3 : 4));
-  set_lut(lut, '1', ARMOR_COLORS[ai][0]);
-  set_lut(lut, '2', ARMOR_COLORS[ai][1]);
+  if (armor && item_colors(armor, c)) {
+    lut['1'] = c[1];
+    lut['2'] = c[0];
+  } else {
+    lut['1'] = PAL_LUT['G'];
+    lut['2'] = PAL_LUT['d'];
+  }
 
   const char *const *body;
   int hand_x, hand_y;
@@ -192,28 +226,45 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
   }
   gfx_draw_charmap(ctx, body, HERO_MAP_W, HERO_MAP_H, x, y, scale, flip, lut);
 
-  // 武器もアイテムレベルで見た目を変える（錆びた剣 → 鉄 → 鋼 → 斧）
-  const Item *wpn = game_equipped(SLOT_WEAPON);
-  if (!wpn) return;
-  int weapon = wpn->ilvl < 5 ? 0 : (wpn->ilvl < 18 ? 1 : (wpn->ilvl < 35 ? 2 : 3));
-  set_lut(lut, '4', WEAPON_COLORS[weapon][0]);
-  set_lut(lut, '5', WEAPON_COLORS[weapon][1]);
-  set_lut(lut, '6', WEAPON_COLORS[weapon][2]);
-
-  bool swing = (pose == HERO_POSE_ATTACK);
-  const char *const *map;
-  int w, h, ax, ay;
-  if (weapon == 3) {
-    if (swing) { map = WPN_AXE_SWING; w = WPN_AXE_SWING_W; h = WPN_AXE_SWING_H; ax = WPN_AXE_SWING_AX; ay = WPN_AXE_SWING_AY; }
-    else { map = WPN_AXE_REST; w = WPN_AXE_REST_W; h = WPN_AXE_REST_H; ax = WPN_AXE_REST_AX; ay = WPN_AXE_REST_AY; }
-  } else {
-    if (swing) { map = WPN_SWORD_SWING; w = WPN_SWORD_SWING_W; h = WPN_SWORD_SWING_H; ax = WPN_SWORD_SWING_AX; ay = WPN_SWORD_SWING_AY; }
-    else { map = WPN_SWORD_REST; w = WPN_SWORD_REST_W; h = WPN_SWORD_REST_H; ax = WPN_SWORD_REST_AX; ay = WPN_SWORD_REST_AY; }
+  // 左手: 盾か触媒（素材の色。盾の面は形ごとの固定色）
+  const Item *off = game_equipped(SLOT_OFFHAND);
+  const ShapeDef *off_shape = game_item_shape(off);
+  if (off_shape && item_colors(off, c)) {
+    lut['7'] = c[2];
+    lut['8'] = c[1];
+    lut['9'] = c[0];
+    lut['j'] = c[3];
+    bool focus = (off_shape - g_shapes) >= SH_ORB;
+    gfx_draw_charmap(ctx, focus ? GEAR_OFF_FOCUS : GEAR_OFF_SHIELD, HERO_MAP_W, HERO_MAP_H, x, y,
+                     scale, flip, lut);
   }
+
+  // 頭: 布の帽子・兜・冠
+  const Item *hat = game_equipped(SLOT_HEAD);
+  const ShapeDef *hat_shape = game_item_shape(hat);
+  if (hat_shape && item_colors(hat, c)) {
+    lut['7'] = c[2];
+    lut['8'] = c[1];
+    lut['9'] = c[0];
+    lut['j'] = c[3];
+    int id = hat_shape - g_shapes;
+    const char *const *map = id >= SH_COIF ? GEAR_HEAD_HELM : (id >= SH_CIRCLET ? GEAR_HEAD_CROWN : GEAR_HEAD_CLOTH);
+    gfx_draw_charmap(ctx, map, HERO_MAP_W, HERO_MAP_H, x, y, scale, flip, lut);
+  }
+
+  // 武器: 系統ごとの形を、素材の色で手に持たせる
+  const Item *wpn = game_equipped(SLOT_WEAPON);
+  const ShapeDef *wpn_shape = game_item_shape(wpn);
+  if (!wpn_shape || !item_colors(wpn, c)) return;
+  lut['4'] = c[1];
+  lut['5'] = c[2];
+  lut['6'] = c[3];
+  WeaponArt art = weapon_art(wpn_shape - g_shapes, pose == HERO_POSE_ATTACK);
   // 手の位置に武器の握りを合わせる（左右反転時は両方を反転して計算）
   int hx = flip ? (HERO_MAP_W - 1 - hand_x) : hand_x;
-  int wax = flip ? (w - 1 - ax) : ax;
-  gfx_draw_charmap(ctx, map, w, h, x + (hx - wax) * scale, y + (hand_y - ay) * scale, scale, flip, lut);
+  int wax = flip ? (art.w - 1 - art.ax) : art.ax;
+  gfx_draw_charmap(ctx, art.map, art.w, art.h, x + (hx - wax) * scale, y + (hand_y - art.ay) * scale,
+                   scale, flip, lut);
 }
 
 // ============================================================
@@ -256,10 +307,9 @@ void gfx_draw_item(GContext *ctx, const Item *it, int x, int y) {
   bool own_art = special >= 0 && game_item_identified(it);
   int icon = own_art ? ITEM_ICON_SPECIAL_FIRST + special : (int)(sh - g_shapes);
 
-  static ResHandle s_icons;
-  if (!s_icons) s_icons = resource_get_handle(RESOURCE_ID_ITEM_ICONS);
+  if (!s_item_icons) s_item_icons = resource_get_handle(RESOURCE_ID_ITEM_ICONS);
   uint8_t rec[ITEM_ICON_RECORD];
-  if (resource_load_byte_range(s_icons, icon * ITEM_ICON_RECORD, rec, sizeof(rec)) != sizeof(rec)) return;
+  if (resource_load_byte_range(s_item_icons, icon * ITEM_ICON_RECORD, rec, sizeof(rec)) != sizeof(rec)) return;
 
   // 色: 0 = 透明、1 = 輪郭、2〜4 = 素材（暗・中・明）、5〜6 = 形ごとの固定色
   GColor pal[7];
