@@ -377,6 +377,7 @@ void scene_window_push(void) {
 }
 
 void scene_window_destroy(void) {
+  if (!s_window) return;   // 知らせで起きて、何も出さずに閉じたとき
   if (s_timer) {
     app_timer_cancel(s_timer);
     s_timer = NULL;

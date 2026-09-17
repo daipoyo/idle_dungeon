@@ -66,7 +66,12 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     case CMD_DUNGEONS:
       row.icon = UI_ICON_DUNGEONS;
       row.title = "Dungeons";
-      row.sub = "Go exploring";
+      if (game_rested_steps() > 0) {
+        snprintf(sub, sizeof(sub), "Rested %ld steps", (long)game_rested_steps());
+        row.sub = sub;
+      } else {
+        row.sub = "Go exploring";
+      }
       break;
     case CMD_SHOP:
       row.icon = UI_ICON_SHOP;

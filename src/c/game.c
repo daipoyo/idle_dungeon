@@ -87,6 +87,10 @@ typedef struct {
   uint8_t scrolls_id;       // 鑑定の巻物
   uint16_t runs;
   uint16_t deaths;
+  uint8_t remind_hour;      // 出発の知らせ（0 = しない）
+  uint8_t pad8;
+  uint16_t pad16;
+  int32_t rested;           // 町にいる間に貯めた歩数
 } Hero;
 
 typedef struct {
@@ -246,6 +250,7 @@ LogStyle game_log_style(int i) {
       return e->c ? LOG_STYLE_GREAT : LOG_STYLE_DANGER;
     case LOG_WELCOME:
     case LOG_TOWN:
+    case LOG_RESTED:
       return LOG_STYLE_TOWN;
     default:
       return LOG_STYLE_DUNGEON;
@@ -314,6 +319,7 @@ void game_log_text(int i, char *buf, size_t size) {
     case LOG_WALK_BACK: snprintf(buf, size, "Turned back for town."); break;
     case LOG_BOTTOM: snprintf(buf, size, "Deepest floor cleared! Heading back."); break;
     case LOG_TOWN: snprintf(buf, size, "Made it back to town."); break;
+    case LOG_RESTED: snprintf(buf, size, "Rested steps: %d used.", e->b); break;
     case LOG_DEATH:
       snprintf(buf, size, "Died in %s F%d. Gear left behind.", g_dungeons[e->a % DUNGEON_COUNT].name, e->b);
       break;
@@ -812,6 +818,19 @@ int game_hp(void) {
 // ============================================================
 int game_auto_return_pct(void) { return s_hero.auto_return_pct; }
 
+int game_remind_hour(void) { return s_hero.remind_hour < 24 ? s_hero.remind_hour : 0; }
+
+void game_cycle_remind(void) {
+  static const uint8_t CHOICES[] = { 0, 6, 7, 8, 9, 10, 12 };
+  int n = sizeof(CHOICES);
+  int cur = 0;
+  for (int i = 0; i < n; i++) {
+    if (CHOICES[i] == s_hero.remind_hour) cur = i;
+  }
+  s_hero.remind_hour = CHOICES[(cur + 1) % n];
+  game_save();
+}
+
 void game_cycle_auto_return(void) {
   static const uint8_t CHOICES[] = { 0, 20, 30, 40, 50 };
   int n = sizeof(CHOICES);
@@ -1188,8 +1207,8 @@ static bool drop_on_path(void) {
 static uint32_t event_gap(void) { return 30 + rnd(61); }       // 平均60歩
 static uint32_t return_gap(void) { return 45 + rnd(91); }      // 平均90歩
 
-// 歩数 n 歩分、冒険を進める
-static void advance(int32_t n) {
+// 歩数 n 歩分、冒険を進める。町に着いたり死んだりして使い切れなかった歩数を返す
+static int32_t advance(int32_t n) {
   while (n > 0 && s_run.mode != RUN_NONE) {
     const DungeonDef *d = cur_dungeon();
     uint32_t total = total_steps(d);
@@ -1249,7 +1268,31 @@ static void advance(int32_t n) {
     }
   }
   s_dirty = true;
+  return n;
 }
+
+// 歩数 raw 歩を冒険に使う（ストライドで多めに進む）。使い切れなかった歩数を、元の歩数に直して返す
+static int32_t walk_steps(int32_t raw) {
+  if (raw <= 0) return 0;
+  int pct = 100 + game_effect_total(FX_STRIDE);
+  memset(&s_batch, 0, sizeof(s_batch));
+  int32_t left = advance(raw * pct / 100);
+  // 一度にたくさん起きたとき（アプリを閉じていた間など）は、まとめを一番新しいログに出す
+  if (s_batch.events > LOG_SUMMARY_MIN) {
+    log_push(LOG_SUMMARY, s_batch.levels, s_batch.battles, s_batch.gold, s_batch.items);
+  }
+  return left * 100 / pct;
+}
+
+// 町にいる間の歩数を貯める（上限あり）
+static void add_rested(int32_t n) {
+  if (n <= 0) return;
+  int32_t total = s_hero.rested + n;
+  s_hero.rested = total < RESTED_MAX ? total : RESTED_MAX;
+  s_dirty = true;
+}
+
+int32_t game_rested_steps(void) { return s_hero.rested; }
 
 bool game_depart(int idx) {
   if (idx < 0 || idx >= DUNGEON_COUNT || s_run.mode != RUN_NONE) return false;
@@ -1268,6 +1311,13 @@ bool game_depart(int idx) {
   s_warned_no_steps = false;
   s_low_hp_alerted = false;
   log_push(LOG_DEPART, idx, 0, 0, 0);
+  if (s_hero.rested > 0) {
+    int32_t use = s_hero.rested;
+    s_hero.rested = 0;
+    log_push(LOG_RESTED, 0, use, 0, 0);
+    int32_t left = walk_steps(use);
+    if (s_run.mode == RUN_NONE) add_rested(left);   // 使い切る前に帰ってきたら、残りはまた貯める
+  }
   game_save();
   return true;
 }
@@ -1558,16 +1608,16 @@ bool game_update(void) {
         log_push(LOG_NO_STEPS, 0, 0, 0, 0);
       }
     } else {
-      int32_t n = steps_since(&s_run.snap);
-      n = n * (100 + game_effect_total(FX_STRIDE)) / 100;   // ストライドで多めに進む
-      if (n > 0) {
-        memset(&s_batch, 0, sizeof(s_batch));
-        advance(n);
-        // 一度にたくさん起きたとき（アプリを閉じていた間など）は、まとめを一番新しいログに出す
-        if (s_batch.events > LOG_SUMMARY_MIN) {
-          log_push(LOG_SUMMARY, s_batch.levels, s_batch.battles, s_batch.gold, s_batch.items);
-        }
-      }
+      int32_t left = walk_steps(steps_since(&s_run.snap));
+      // 途中で町に着いた（または倒れた）なら、残りの歩数は次の出発のために貯める
+      if (s_run.mode == RUN_NONE) add_rested(left);
+    }
+  } else if (steps_available()) {
+    // 町にいる間の歩数も無駄にしない（前回の記録は探索の最後の記録がそのまま続く）
+    int32_t n = steps_since(&s_run.snap);
+    if (n > 0) {
+      add_rested(n);
+      s_dirty = true;
     }
   }
   bool changed = s_dirty;
@@ -1609,6 +1659,8 @@ static void new_game(void) {
   s_hero.potions = 3;
   s_hero.portals = 1;
   s_hero.auto_return_pct = 30;
+  s_hero.remind_hour = 8;
+  steps_snapshot(&s_run.snap);   // 始めた時点より前の歩数は数えない
   s_run.rng = (uint32_t)time(NULL);
   // 最初の装備
   s_equip[SLOT_WEAPON] = make_item(SH_SHORT_SWORD, 1);

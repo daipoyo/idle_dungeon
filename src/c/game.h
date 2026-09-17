@@ -16,6 +16,7 @@
 #define MAX_LEVEL 50
 #define MAX_POTIONS 5
 #define MAX_PORTALS 9
+#define RESTED_MAX 6000                  // 町にいる間に貯めておける歩数
 #define DROP_EXPIRE_SEC (72 * 60 * 60)   // 死亡時に残した物が消えるまで
 #define POTION_PRICE 25
 #define PORTAL_PRICE 60
@@ -119,6 +120,7 @@ typedef enum {
   LOG_SUMMARY,      // まとめ a=レベル b=戦闘 c=ゴールド d=アイテム
   LOG_IDENTIFY,     // 鑑定した a=レア度 b=基本アイテム
   LOG_UPGRADE,      // 鍛冶屋 a=強化後の段階 b=基本アイテム c=成功なら1
+  LOG_RESTED,       // 出発時に休息歩数を使った b=歩数
 } LogType;
 
 // レア度の呼び名（White/Blue/Yellow/Green/Gold）
@@ -174,12 +176,15 @@ bool game_depart(int idx);
 bool game_use_portal(void);
 void game_walk_back(void);
 bool game_steps_available(void);
+int32_t game_rested_steps(void);   // 町にいる間に貯めた歩数（次の出発で使う）
 
 // ---- 設定 ----
 int game_auto_return_pct(void);    // 0 = しない
 void game_cycle_auto_return(void);
 bool game_vibrate(void);
 void game_toggle_vibrate(void);
+int game_remind_hour(void);        // 0 = 知らせない。町にいたらこの時刻にアプリを起こす
+void game_cycle_remind(void);
 
 // ---- アイテム ----
 extern const AffixDef g_prefixes[];

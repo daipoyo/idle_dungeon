@@ -5,6 +5,7 @@
 // ============================================================
 // ダンジョン選択（選ぶとそのまま出発）
 //   前のダンジョンのボスを倒すと次が開く
+//   町で貯めた歩数があれば見出しに出す（出発した瞬間に使われる）
 // ============================================================
 static Window *s_window;
 static MenuLayer *s_menu;
@@ -13,6 +14,16 @@ static GBitmap *s_enemy_sub[6];
 
 static uint16_t get_num_rows(MenuLayer *menu, uint16_t section, void *data) {
   return DUNGEON_COUNT;
+}
+
+static int16_t get_header_height(MenuLayer *menu, uint16_t section, void *data) {
+  return game_rested_steps() > 0 ? MENU_HEADER_H : 0;
+}
+
+static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *data) {
+  static char buf[32];
+  snprintf(buf, sizeof(buf), "RESTED %ld STEPS", (long)game_rested_steps());
+  gfx_draw_header(ctx, cell, buf);
 }
 
 static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
@@ -61,6 +72,8 @@ static void window_load(Window *window) {
   s_menu = menu_layer_create(layer_get_bounds(root));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows = get_num_rows,
+    .get_header_height = get_header_height,
+    .draw_header = draw_header,
     .get_cell_height = get_cell_height,
     .draw_row = draw_row,
     .select_click = select_click,

@@ -517,6 +517,56 @@ static void test_codex(void) {
   check(total < 4000, "save data fits in 4KB");
 }
 
+static void test_rested(void) {
+  puts("Rested steps");
+  reset_game(31);
+  check(game_rested_steps() == 0, "a new hero starts with no rested steps");
+  pctest_steps_today += 1200;
+  game_update();
+  check(game_rested_steps() == 1200, "steps taken in town are saved up");
+  pctest_steps_today += 20000;
+  game_update();
+  check(game_rested_steps() == RESTED_MAX, "rested steps stop at the cap");
+
+  // 出発した瞬間に使われる
+  s_hero.level = 20;
+  s_hero.rested = 500;
+  check(game_depart(0), "the hero sets out");
+  check(game_rested_steps() == 0 && game_run_mode() == RUN_EXPLORE && s_run.depth == 500,
+        "rested steps move the hero forward on departure");
+
+  // 使い切る前に町へ戻ったら、残りはまた貯まる（1500歩で最深部、1500歩で帰り道）
+  s_run.mode = RUN_NONE;
+  s_hero.rested = 5000;
+  game_depart(0);
+  printf("  5000 rested steps on a 1500-step dungeon: mode %d, %ld left over\n", game_run_mode(),
+         (long)game_rested_steps());
+  check(game_run_mode() == RUN_NONE && game_rested_steps() == 2000, "leftover rested steps are kept");
+
+  // 歩いている途中で町に着いたら、その日の残りの歩数も貯まる
+  s_hero.rested = 0;
+  game_depart(0);
+  pctest_steps_today += 4000;
+  game_update();
+  check(game_run_mode() == RUN_NONE && game_rested_steps() == 1000,
+        "steps left after reaching town are saved for the next run");
+
+  game_save();
+  s_hero.rested = 0;
+  game_init();
+  check(game_rested_steps() == 1000, "rested steps survive a reload");
+
+  // 休息歩数ができる前のセーブ（Hero が 20 バイト）も、そのまま読める
+  pctest_persist_len[KEY_HERO] = 20;
+  memset(&s_hero, 0, sizeof(s_hero));
+  game_init();
+  check(s_hero.level == 20 && game_rested_steps() == 0 && game_remind_hour() == 0,
+        "older saves load with no rested steps and the reminder off");
+
+  game_cycle_remind();
+  check(game_remind_hour() == 6, "the reminder cycles through hours");
+}
+
 // 実際に歩いて遊んだときの様子（バランス確認）
 //   margin: ダンジョン選びの強気さ（敵のレベルが「勇者のレベル + margin」までなら入る）
 static void play_days(int days, int margin, bool verbose) {
@@ -529,8 +579,8 @@ static void play_days(int days, int margin, bool verbose) {
     for (int d = 0; d < DUNGEON_COUNT; d++) {
       if (game_dungeon_unlocked(d) && g_dungeons[d].lvl_max <= game_level() + margin) pick = d;
     }
+    int before_deaths = s_hero.deaths;   // 出発した瞬間に休息歩数で倒れることもある
     if (game_run_mode() == RUN_NONE && game_depart(pick)) runs++;
-    int before_deaths = s_hero.deaths;
     pctest_steps_today += 4000;
     game_update();
     deaths += (s_hero.deaths > before_deaths);
@@ -574,6 +624,7 @@ int main(void) {
   test_stash();
   test_blacksmith();
   test_codex();
+  test_rested();
   test_play_balance();
   printf("\n%s (%d failure%s)\n", s_failures ? "FAILED" : "ALL PASSED", s_failures,
          s_failures == 1 ? "" : "s");

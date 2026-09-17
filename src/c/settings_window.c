@@ -6,12 +6,13 @@
 // 設定
 //   ・自動帰還: HP が何%を切ったら帰るか（巻物があれば使い、なければ歩いて帰る）
 //   ・危険の振動: 自動帰還や死亡のときに振動する（電池の消費が増える）
+//   ・出発の知らせ: 決まった時刻に町にいたら、アプリが起きて知らせる
 // ============================================================
 static Window *s_window;
 static MenuLayer *s_menu;
 
 static uint16_t get_num_rows(MenuLayer *menu, uint16_t section, void *data) {
-  return 2;
+  return 3;
 }
 
 static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
@@ -27,9 +28,14 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     if (pct) snprintf(sub, sizeof(sub), "Below %d%% HP", pct);
     else snprintf(sub, sizeof(sub), "Off (risky!)");
     row.warn_sub = pct == 0;
-  } else {
+  } else if (index->row == 1) {
     row.title = "Danger Vibe";
     snprintf(sub, sizeof(sub), game_vibrate() ? "On: more battery" : "Off");
+  } else {
+    row.title = "Depart Reminder";
+    int hour = game_remind_hour();
+    if (hour) snprintf(sub, sizeof(sub), "%d:00 if in town", hour);
+    else snprintf(sub, sizeof(sub), "Off");
   }
   row.sub = sub;
   gfx_draw_row(ctx, cell, &row);
@@ -38,9 +44,11 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
 static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
   if (index->row == 0) {
     game_cycle_auto_return();
-  } else {
+  } else if (index->row == 1) {
     game_toggle_vibrate();
     if (game_vibrate()) vibes_short_pulse();
+  } else {
+    game_cycle_remind();
   }
   menu_layer_reload_data(menu);
 }
