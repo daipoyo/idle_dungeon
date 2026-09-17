@@ -211,8 +211,8 @@ typedef enum {
 #define BASE_COUNT (SHAPE_COUNT * TIER_COUNT)   // 900
 #define SPECIAL_BASE (BASE_COUNT + 1)           // 固有・セットの base 番号は 901 から
 
+// 名前は表に持たない（リソース item_names.bin から item_shape_name などで読む）
 typedef struct {
-  const char *name;
   uint8_t slot;      // EquipSlot（指輪は SLOT_RING1）
   uint8_t family;    // Family
   uint8_t rank;      // 0〜3。高いほど出にくい
@@ -221,7 +221,6 @@ typedef struct {
 
 // ---- 固有装備・セット装備 ----
 typedef struct {
-  const char *name;
   uint8_t shape;       // ShapeId
   uint8_t set_id;      // 0 = 固有装備、1〜 = g_sets の番号 + 1
   uint8_t dungeon;     // よく出るダンジョン（ANY_DUNGEON = どこでも）
@@ -232,13 +231,11 @@ typedef struct {
 } SpecialDef;
 
 typedef struct {
-  const char *name;
   uint8_t fx2, val2;   // 2部位そろえたとき
   uint8_t fx3, val3;   // 3部位そろえたとき（2部位の分に加えて）
 } SetDef;
 
 extern const ShapeDef g_shapes[SHAPE_COUNT];
-extern const char *const g_material_names[FAM_COUNT][TIER_COUNT];
 extern const SpecialDef g_specials[];
 extern const int g_special_count;
 extern const SetDef g_sets[];
@@ -247,3 +244,12 @@ extern const char *const g_effect_names[FX_COUNT];
 
 // アイテムLv → 素材の段階（0〜5）
 int item_tier_for_level(int ilvl);
+
+// ---- 名前 ----
+//   アプリ本体の RAM を節約するため、名前はリソース（item_names.bin）に置いて使うときに読む。
+//   正本はこのファイルの SHAPE_LIST と items.c の SPECIAL / SET_DEF。tools/gen_art.py が書き出す
+#define ITEM_NAME_LEN 21   // 20文字 + 終端。buf はこの大きさ以上
+void item_shape_name(int shape, char *buf);
+void item_special_name(int special, char *buf);
+void item_set_name(int set_index, char *buf);          // g_sets の添字
+void item_material_name(int family, int tier, char *buf);

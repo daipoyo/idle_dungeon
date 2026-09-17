@@ -40,7 +40,8 @@
         { "type": "bitmap", "name": "IMG_BG_TOWN", "file": "images/bg_town.png" },
         { "type": "bitmap", "name": "IMG_SHOP_SCENE", "file": "images/shop_scene.png" },
         { "type": "bitmap", "name": "IMG_KEEPER_FACE", "file": "images/keeper_face.png" },
-        { "type": "raw", "name": "ITEM_ICONS", "file": "data/item_icons.bin" }
+        { "type": "raw", "name": "ITEM_ICONS", "file": "data/item_icons.bin" },
+        { "type": "raw", "name": "ITEM_NAMES", "file": "data/item_names.bin" }
       ]
     }
   }

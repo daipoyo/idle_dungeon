@@ -7,6 +7,13 @@
 #define ITEM_ICON_RECORD 78
 #define ITEM_ICON_SPECIAL_FIRST 150   // 固有・セット装備の絵はこの番号から
 
+// 名前: item_names.bin は 1つ 21 バイト（20文字 + 終端）
+#define ITEM_NAME_RECORD 21
+#define ITEM_NAME_SHAPE_FIRST 0
+#define ITEM_NAME_SPECIAL_FIRST 150
+#define ITEM_NAME_SET_FIRST 250
+#define ITEM_NAME_MATERIAL_FIRST 262
+
 // 素材の色（暗・中・明）[系統][段階]
 static const uint8_t ITEM_TIER_COLORS[4][6][3] = {
   { { 0xE4, 0xF8, 0xFE }, { 0xD5, 0xEA, 0xFF }, { 0xD6, 0xEB, 0xEF }, { 0xE0, 0xF4, 0xFD }, { 0xCA, 0xDF, 0xFF }, { 0xD2, 0xE7, 0xFB } },  // metal

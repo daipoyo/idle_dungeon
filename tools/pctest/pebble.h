@@ -65,5 +65,21 @@ static inline void persist_delete(uint32_t key) {
   if (key < PCTEST_PERSIST_KEYS) pctest_persist_len[key] = 0;
 }
 
+// リソース（resources/data の raw ファイルを直接読む）
+typedef const char *ResHandle;
+#define RESOURCE_ID_ITEM_NAMES "../../resources/data/item_names.bin"
+#define RESOURCE_ID_ITEM_ICONS "../../resources/data/item_icons.bin"
+
+static inline ResHandle resource_get_handle(const char *id) { return id; }
+
+static inline size_t resource_load_byte_range(ResHandle h, uint32_t offset, uint8_t *buf, size_t size) {
+  FILE *f = fopen(h, "rb");
+  if (!f) return 0;
+  size_t n = 0;
+  if (fseek(f, (long)offset, SEEK_SET) == 0) n = fread(buf, 1, size, f);
+  fclose(f);
+  return n;
+}
+
 static inline void vibes_double_pulse(void) {}
 static inline void vibes_short_pulse(void) {}

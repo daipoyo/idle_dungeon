@@ -137,7 +137,9 @@ static void draw_content(Layer *layer, GContext *ctx) {
     const SetDef *set = game_item_set(it);
     if (set) {
       int worn = game_set_pieces_equipped(it);
-      snprintf(buf, sizeof(buf), "%s set %d/3", set->name, worn);
+      char set_name[ITEM_NAME_LEN];
+      item_set_name((int)(set - g_sets), set_name);
+      snprintf(buf, sizeof(buf), "%s set %d/3", set_name, worn);
       pen_text(&p, buf, GColorBrightGreen);
       game_effect_text((Effect)set->fx2, set->val2, stat, sizeof(stat));
       snprintf(buf, sizeof(buf), "2: %s", stat);

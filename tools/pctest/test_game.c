@@ -141,8 +141,10 @@ static Item special_item(int special, int ilvl) {
 }
 
 static int find_special(const char *name) {
+  char buf[ITEM_NAME_LEN];
   for (int i = 0; i < g_special_count; i++) {
-    if (strcmp(g_specials[i].name, name) == 0) return i;
+    item_special_name(i, buf);
+    if (strcmp(buf, name) == 0) return i;
   }
   printf("  (missing special: %s)\n", name);
   return 0;

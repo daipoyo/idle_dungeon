@@ -20,6 +20,7 @@ import os
 import re
 
 N = 12
+NAME_RECORD = 21   # 名前 1つ分（items.h の ITEM_NAME_LEN と同じ）
 
 # ------------------------------------------------------------
 # 素材の色（暗・中・明）。系統の順は items.h の Family と同じ
@@ -2247,8 +2248,13 @@ def read_catalog(root):
     items_h = open(os.path.join(root, 'src', 'c', 'items.h'), encoding='utf-8').read()
     shapes = re.findall(r'X\((\w+), "([^"]+)", (SLOT_\w+), (FAM_\w+),', items_h)
     items_c = open(os.path.join(root, 'src', 'c', 'items.c'), encoding='utf-8').read()
-    specials = re.findall(r'\{ "((?:[^"\\]|\\.)+)", SH_(\w+), (\d+),', items_c)
+    specials = re.findall(r'SPECIAL\("((?:[^"\\]|\\.)+)", SH_(\w+), (\d+),', items_c)
     return shapes, specials
+
+
+def read_set_names(root):
+    items_c = open(os.path.join(root, 'src', 'c', 'items.c'), encoding='utf-8').read()
+    return re.findall(r'SET_DEF\("((?:[^"\\]|\\.)+)",', items_c)
 
 
 FAMILY_INDEX = {'FAM_METAL': 0, 'FAM_SOFT': 1, 'FAM_WOOD': 2, 'FAM_JEWEL': 3}
@@ -2313,6 +2319,27 @@ def build(root, pal):
     with open(os.path.join(data_dir, 'item_icons.bin'), 'wb') as f:
         f.write(bytes(data))
 
+    # 名前: 形 150 → 固有・セット 100 → セット 12 → 素材（系統 4 x 段階 6）の順に、20文字ずつ
+    set_names = read_set_names(root)
+    assert len(set_names) == 12, len(set_names)
+    names = [name for _, name, _, _ in shapes]
+    names += [name for name, _, _ in specials]
+    names += set_names
+    names += [material for _, tiers in FAMILIES for material, _ in tiers]
+    blob = bytearray()
+    for name in names:
+        raw = name.encode('ascii')
+        assert len(raw) < NAME_RECORD, ('name too long', name)
+        blob += raw + bytes(NAME_RECORD - len(raw))
+    with open(os.path.join(data_dir, 'item_names.bin'), 'wb') as f:
+        f.write(bytes(blob))
+    name_first = {
+        'SHAPE': 0,
+        'SPECIAL': len(shapes),
+        'SET': len(shapes) + len(specials),
+        'MATERIAL': len(shapes) + len(specials) + len(set_names),
+    }
+
     lines = [
         '// このファイルは tools/gen_art.py（tools/gb_items.py）で自動生成されています。直接編集しないでください。',
         '#pragma once',
@@ -2322,6 +2349,10 @@ def build(root, pal):
         '#define ITEM_ICON_DOTS %d' % N,
         '#define ITEM_ICON_RECORD 78',
         '#define ITEM_ICON_SPECIAL_FIRST %d   // 固有・セット装備の絵はこの番号から' % len(shapes),
+        '',
+        '// 名前: item_names.bin は 1つ %d バイト（20文字 + 終端）' % NAME_RECORD,
+        '#define ITEM_NAME_RECORD %d' % NAME_RECORD,
+    ] + ['#define ITEM_NAME_%s_FIRST %d' % (k, v) for k, v in name_first.items()] + [
         '',
         '// 素材の色（暗・中・明）[系統][段階]',
         'static const uint8_t ITEM_TIER_COLORS[4][6][3] = {',

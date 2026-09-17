@@ -534,12 +534,16 @@ void game_item_short_name(const Item *it, char *buf, size_t size) {
     snprintf(buf, size, "---");
     return;
   }
+  char material[ITEM_NAME_LEN], shape[ITEM_NAME_LEN];
   int special = game_item_special(it);
   if (special >= 0 && game_item_identified(it)) {
-    snprintf(buf, size, "%s", g_specials[special].name);
+    item_special_name(special, shape);
+    snprintf(buf, size, "%s", shape);
     return;
   }
-  snprintf(buf, size, "%s %s", g_material_names[sh->family][game_item_tier(it)], sh->name);
+  item_material_name(sh->family, game_item_tier(it), material);
+  item_shape_name((int)(sh - g_shapes), shape);
+  snprintf(buf, size, "%s %s", material, shape);
 }
 
 void game_item_name(const Item *it, char *buf, size_t size) {
