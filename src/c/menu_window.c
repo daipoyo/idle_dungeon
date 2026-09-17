@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "game.h"
 #include "gfx.h"
+#include "item_art.h"
 
 // ============================================================
 // メニュー（町にいるときとダンジョンにいるときで項目が変わる）
@@ -63,64 +64,64 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   RowSpec row = { .icon = -1 };
   switch (cmds[index->row]) {
     case CMD_DUNGEONS:
-      row.icon = 14;
+      row.icon = UI_ICON_DUNGEONS;
       row.title = "Dungeons";
       row.sub = "Go exploring";
       break;
     case CMD_SHOP:
-      row.icon = 8;
+      row.icon = UI_ICON_SHOP;
       row.title = "Shop";
       row.sub = "Buy & sell";
       break;
     case CMD_STATUS:
-      row.icon = 5;
+      row.icon = UI_ICON_STATUS;
       row.title = "Status";
       row.sub = game_can_change_gear() ? "Gear & bag" : "View only";
       break;
     case CMD_STASH:
-      row.icon = 11;
+      row.icon = UI_ICON_STASH;
       row.title = "Stash";
       snprintf(sub, sizeof(sub), "%d/%d stored", game_stash_count(), STASH_SIZE);
       row.sub = sub;
       break;
     case CMD_SMITH:
-      row.icon = 3;
+      row.icon = UI_ICON_SMITH;
       row.title = "Blacksmith";
       row.sub = "Upgrade to +10";
       break;
     case CMD_CODEX:
-      row.icon = 14;
+      row.icon = UI_ICON_CODEX;
       row.title = "Codex";
       snprintf(sub, sizeof(sub), "%d/%d found", game_codex_seen_count(), game_codex_size());
       row.sub = sub;
       break;
     case CMD_IDENTIFY:
-      row.icon = 13;
+      row.icon = UI_ICON_APPRAISER;
       row.title = "Appraiser";
       snprintf(sub, sizeof(sub), "%d unidentified", game_unidentified_count());
       row.sub = sub;
       break;
     case CMD_AGENT:
-      row.icon = 11;
+      row.icon = UI_ICON_LOST_GEAR;
       row.title = "Lost Gear";
       snprintf(sub, sizeof(sub), "%ldh left", (long)(game_drop_seconds_left() / 3600));
       row.sub = sub;
       row.warn_sub = true;
       break;
     case CMD_SETTINGS:
-      row.icon = 10;
+      row.icon = UI_ICON_SETTINGS;
       row.title = "Settings";
       row.sub = "Auto return";
       break;
     case CMD_PORTAL:
-      row.icon = 15;
+      row.icon = UI_ICON_PORTAL;
       row.title = "Portal";
       snprintf(sub, sizeof(sub), "Scrolls x%d", game_portals());
       row.sub = sub;
       row.dim = game_portals() == 0;
       break;
     case CMD_WALK_BACK:
-      row.icon = 12;
+      row.icon = UI_ICON_WALK_BACK;
       row.title = "Walk Back";
       row.sub = "Head to town";
       break;
@@ -176,7 +177,6 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
 
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
-  gfx_items_acquire();
   s_menu = menu_layer_create(layer_get_bounds(root));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
     .get_num_rows = get_num_rows,
@@ -191,7 +191,6 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
-  gfx_items_release();
   window_destroy(window);
   s_window = NULL;
 }

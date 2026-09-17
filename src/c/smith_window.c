@@ -70,6 +70,22 @@ static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
   return ROW_H;
 }
 
+// 強化で変わる性能（"ATK 74>80" のように、変わるものだけ）
+static void upgrade_preview(const Item *it, char *buf, size_t size) {
+  Item next = *it;
+  next.plus++;
+  ItemStats a = game_item_stats(it), b = game_item_stats(&next);
+  static const char *const NAMES[3] = { "ATK", "DEF", "HP" };
+  const int before[3] = { a.atk, a.def, a.hp }, after[3] = { b.atk, b.def, b.hp };
+  int n = 0;
+  buf[0] = '\0';
+  for (int i = 0; i < 3 && n < (int)size; i++) {
+    if (before[i] == after[i]) continue;
+    n += snprintf(buf + n, size - n, "%s%s %d>%d", n ? " " : "", NAMES[i], before[i], after[i]);
+  }
+  if (!buf[0]) snprintf(buf, size, "No change");
+}
+
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *data) {
   static char name[40];
   static char sub[32];
@@ -90,9 +106,15 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   } else if (it->plus >= MAX_PLUS) {
     row.sub = "Fully upgraded";
     row.warn_sub = false;
+  } else if (s_confirm_section == index->section && s_confirm_row == index->row) {
+    // 確認待ちの行: 強化するとどう変わるか
+    upgrade_preview(it, sub, sizeof(sub));
+    row.sub = sub;
+    row.tint_sub = true;
+    row.sub_color = THEME_HI;
   } else {
     int cost = game_upgrade_cost(it);
-    snprintf(sub, sizeof(sub), "+%d %dG %d%%", it->plus + 1, cost, game_upgrade_chance(it));
+    snprintf(sub, sizeof(sub), "To +%d: %dG %d%%", it->plus + 1, cost, game_upgrade_chance(it));
     row.sub = sub;
     row.warn_sub = game_gold() < cost;
   }
@@ -158,7 +180,6 @@ static void selection_changed(MenuLayer *menu, MenuIndex new_index, MenuIndex ol
 
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
-  gfx_items_acquire();
   clear_confirm();
   s_message = NULL;
   s_menu = menu_layer_create(layer_get_bounds(root));
@@ -180,7 +201,6 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
-  gfx_items_release();
   window_destroy(window);
   s_window = NULL;
 }

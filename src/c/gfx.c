@@ -267,57 +267,8 @@ void gfx_draw_hero(GContext *ctx, int x, int y, HeroPose pose, int scale, bool f
                    scale, flip, lut);
 }
 
-// ============================================================
-// 共有ビットマップ
-// ============================================================
-static GBitmap *s_items_sheet;
-static GBitmap *s_item_sub;
-static int s_items_refs;
-
-void gfx_items_acquire(void) {
-  if (s_items_refs++ == 0) {
-    s_items_sheet = gbitmap_create_with_resource(RESOURCE_ID_IMG_ITEMS);
-    s_item_sub = gbitmap_create_as_sub_bitmap(s_items_sheet, GRect(0, 0, ICON_SIZE, ICON_SIZE));
-  }
-}
-
-void gfx_items_release(void) {
-  if (s_items_refs <= 0) return;
-  if (--s_items_refs == 0) {
-    gbitmap_destroy(s_item_sub);
-    gbitmap_destroy(s_items_sheet);
-    s_item_sub = NULL;
-    s_items_sheet = NULL;
-  }
-}
-
-void gfx_draw_item_icon(GContext *ctx, int item_id, int x, int y) {
-  if (!s_item_sub || item_id < 0 || item_id >= 16) return;
-  gbitmap_set_bounds(s_item_sub, GRect((item_id % 4) * ICON_SIZE, (item_id / 4) * ICON_SIZE,
-                                       ICON_SIZE, ICON_SIZE));
-  graphics_context_set_compositing_mode(ctx, GCompOpSet);
-  graphics_draw_bitmap_in_rect(ctx, s_item_sub, GRect(x, y, ICON_SIZE, ICON_SIZE));
-}
-
-// 絵はリソース（item_icons.bin）にまとめてあり、描くたびに1つ分だけ読む
-void gfx_draw_item(GContext *ctx, const Item *it, int x, int y) {
-  const ShapeDef *sh = game_item_shape(it);
-  if (!sh) return;
-  int special = game_item_special(it);
-  bool own_art = special >= 0 && game_item_identified(it);
-  int icon = own_art ? ITEM_ICON_SPECIAL_FIRST + special : (int)(sh - g_shapes);
-
-  if (!s_item_icons) s_item_icons = resource_get_handle(RESOURCE_ID_ITEM_ICONS);
-  uint8_t rec[ITEM_ICON_RECORD];
-  if (resource_load_byte_range(s_item_icons, icon * ITEM_ICON_RECORD, rec, sizeof(rec)) != sizeof(rec)) return;
-
-  // 色: 0 = 透明、1 = 輪郭、2〜4 = 素材（暗・中・明）、5〜6 = 形ごとの固定色
-  GColor pal[7];
-  for (int i = 0; i < 6; i++) pal[i + 1] = (GColor){ .argb = rec[i] };
-  if (!own_art) {
-    const uint8_t *tier = ITEM_TIER_COLORS[sh->family][game_item_tier(it)];
-    for (int i = 0; i < 3; i++) pal[i + 2] = (GColor){ .argb = tier[i] };
-  }
+// 絵のデータ1つ分（item_icons.bin の 78バイト）を描く。pal は 0〜6 番の色
+static void draw_icon_record(GContext *ctx, const uint8_t *rec, const GColor *pal, int x, int y, int dot) {
   for (int row = 0; row < ITEM_ICON_DOTS; row++) {
     const uint8_t *line = rec + 6 + row * ITEM_ICON_DOTS / 2;
     // 同じ色が続くところはまとめて塗る
@@ -331,11 +282,50 @@ void gfx_draw_item(GContext *ctx, const Item *it, int x, int y) {
       }
       if (v > 0 && v < 7) {
         graphics_context_set_fill_color(ctx, pal[v]);
-        graphics_fill_rect(ctx, GRect(x + col * PX, y + row * PX, run * PX, PX), 0, GCornerNone);
+        graphics_fill_rect(ctx, GRect(x + col * dot, y + row * dot, run * dot, dot), 0, GCornerNone);
       }
       col += run;
     }
   }
+}
+
+static bool load_icon_record(int icon, uint8_t *rec, GColor *pal) {
+  if (!s_item_icons) s_item_icons = resource_get_handle(RESOURCE_ID_ITEM_ICONS);
+  if (resource_load_byte_range(s_item_icons, icon * ITEM_ICON_RECORD, rec, ITEM_ICON_RECORD) !=
+      ITEM_ICON_RECORD) {
+    return false;
+  }
+  // 色: 0 = 透明、1 = 輪郭、2〜4 = 素材（暗・中・明）、5〜6 = 固定色
+  for (int i = 0; i < 6; i++) pal[i + 1] = (GColor){ .argb = rec[i] };
+  return true;
+}
+
+// 絵はリソース（item_icons.bin）にまとめてあり、描くたびに1つ分だけ読む
+void gfx_draw_item_scaled(GContext *ctx, const Item *it, int x, int y, int dot) {
+  const ShapeDef *sh = game_item_shape(it);
+  if (!sh) return;
+  int special = game_item_special(it);
+  bool own_art = special >= 0 && game_item_identified(it);
+  int icon = own_art ? ITEM_ICON_SPECIAL_FIRST + special : (int)(sh - g_shapes);
+  uint8_t rec[ITEM_ICON_RECORD];
+  GColor pal[7];
+  if (!load_icon_record(icon, rec, pal)) return;
+  if (!own_art) {
+    const uint8_t *tier = ITEM_TIER_COLORS[sh->family][game_item_tier(it)];
+    for (int i = 0; i < 3; i++) pal[i + 2] = (GColor){ .argb = tier[i] };
+  }
+  draw_icon_record(ctx, rec, pal, x, y, dot);
+}
+
+void gfx_draw_item(GContext *ctx, const Item *it, int x, int y) {
+  gfx_draw_item_scaled(ctx, it, x, y, PX);
+}
+
+void gfx_draw_ui_icon(GContext *ctx, int icon, int x, int y) {
+  uint8_t rec[ITEM_ICON_RECORD];
+  GColor pal[7];
+  if (icon < 0 || !load_icon_record(UI_ICON_FIRST + icon, rec, pal)) return;
+  draw_icon_record(ctx, rec, pal, x, y, PX);
 }
 
 GColor gfx_rarity_color(const Item *it) {
@@ -503,8 +493,8 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
     gfx_draw_item_glow(ctx, row->item, x - PX, iy, s_glow_frame);
     x += ITEM_ICON_SIZE + PX;
   } else if (row->icon >= 0) {
-    gfx_draw_item_icon(ctx, row->icon, x, SNAP((b.size.h - ICON_SIZE) / 2));
-    x += ICON_SIZE + 2 * PX;
+    gfx_draw_ui_icon(ctx, row->icon, x - PX, SNAP((b.size.h - ITEM_ICON_SIZE) / 2));
+    x += ITEM_ICON_SIZE + PX;
   } else if (row->bitmap) {
     graphics_context_set_compositing_mode(ctx, GCompOpSet);
     graphics_draw_bitmap_in_rect(ctx, row->bitmap,
@@ -515,6 +505,7 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   GColor fg = row->dim ? THEME_DIM : (hi ? THEME_HI : THEME_FG);
   GColor sub = row->dim ? THEME_DIM : THEME_SUB;
   if (row->warn_sub) sub = THEME_WARN;
+  if (row->tint_sub && !row->dim) sub = row->sub_color;
   // レア度の色は、選んでいない行のタイトルにだけ使う（選択中は反転して見えるため）
   GColor title_fg = (row->tint_title && !row->dim && !hi) ? row->title_color : fg;
 
@@ -569,6 +560,43 @@ void gfx_draw_heart(GContext *ctx, int x, int y) {
 
 void gfx_draw_cursor(GContext *ctx, int x, int y, GColor color) {
   gfx_text(ctx, "}", GRect(x, y, 4 * PX, LINE_H), GTextAlignmentLeft, color);
+}
+
+static const char *const MINI_ICONS[3][5] = {
+  {  // ポーション（赤い薬の瓶）
+    "..g..",
+    ".gRg.",
+    "gRRRg",
+    "gRWRg",
+    ".ggg.",
+  },
+  {  // 帰還の巻物（青い渦）
+    ".UUU.",
+    "Uc.cU",
+    "U.x.U",
+    "Uc.cU",
+    ".UUU.",
+  },
+  {  // 鑑定の巻物（巻物と赤い封）
+    "lllll",
+    "lAAAl",
+    "lllll",
+    "lAARl",
+    "lllll",
+  },
+};
+
+void gfx_draw_mini_icon(GContext *ctx, MiniIcon icon, int x, int y) {
+  gfx_draw_charmap(ctx, MINI_ICONS[icon], 5, 5, x, y, PX, false, NULL);
+}
+
+int gfx_draw_mini_count(GContext *ctx, MiniIcon icon, int count, int x, int y, GColor color) {
+  gfx_draw_mini_icon(ctx, icon, x, y);
+  x += 6 * PX;
+  char buf[4];
+  snprintf(buf, sizeof(buf), "%d", count);
+  gfx_text(ctx, buf, GRect(x, y, 8 * PX, LINE_H), GTextAlignmentLeft, count > 0 ? color : THEME_DIM);
+  return x + gfx_text_width(buf) + 3 * PX;
 }
 
 static const char *const SPARK[] = {

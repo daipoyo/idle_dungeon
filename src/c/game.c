@@ -860,6 +860,8 @@ RunMode game_run_mode(void) { return (RunMode)s_run.mode; }
 int game_run_dungeon(void) { return s_run.dungeon; }
 int game_floor(void) { return floor_at(position()); }
 int game_return_left(void) { return (int)s_run.return_left; }
+int game_run_position(void) { return (int)position(); }
+int game_run_total_steps(void) { return (int)total_steps(cur_dungeon()); }
 bool game_steps_available(void) { return steps_available(); }
 
 int game_steps_to_next_floor(void) {

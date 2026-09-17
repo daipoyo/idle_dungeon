@@ -165,11 +165,7 @@ def main():
     def out(name, img):
         report.append((name, img.size, save(img, os.path.join(IMG_DIR, name))))
 
-    # --- アイテムアイコン (4x4 のシート) ---
-    icons = [grid_image(g) for g in gb_sprites.item_icons()]
     cell = gb_sprites.ICON_SIZE * PX
-    items_sheet = sheet(icons, 4, cell, cell)
-    out('items.png', items_sheet)
 
     # --- 敵 (1種につき2フレームを横に並べる) ---
     esz = gb_sprites.ENEMY_SIZE * PX
@@ -218,13 +214,13 @@ def main():
 
     # --- 図鑑アイテムの絵（resources/data/item_icons.bin と src/c/item_art.h） ---
     shapes, specials = gb_items.build(ROOT, PAL)
-    report.append(('item_icons.bin', (len(shapes) + len(specials), 1), 6))
+    report.append(('item_icons.bin', (len(shapes) + len(specials) + len(gb_items.UI_ICONS), 1), 6))
 
     for name, size, n in report:
         print('%-22s %3dx%-3d colors=%d' % (name, size[0], size[1], n))
 
     if preview_dir:
-        write_previews(preview_dir, icons, enemies, chests, scenes, shop, face, frames, weapons)
+        write_previews(preview_dir, enemies, chests, scenes, shop, face, frames, weapons)
         gb_items.preview(ROOT, PAL, preview_dir, new_image, upscale)
 
 
@@ -340,9 +336,8 @@ def hero_gear_preview(d, frames, weapons):
     out.save(os.path.join(d, 'pv_hero_gear.png'))
 
 
-def write_previews(d, icons, enemies, chests, scenes, shop, face, frames, weapons):
+def write_previews(d, enemies, chests, scenes, shop, face, frames, weapons):
     gray = (0x55, 0x55, 0x55)
-    upscale(on_bg(sheet(icons, 8, 16, 16), (0, 0, 0)), 4).save(os.path.join(d, 'pv_items.png'))
     flat = []
     for a, b in enemies:
         flat += [a, b]

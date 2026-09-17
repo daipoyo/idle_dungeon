@@ -6,6 +6,21 @@
 #define ITEM_ICON_DOTS 12
 #define ITEM_ICON_RECORD 78
 #define ITEM_ICON_SPECIAL_FIRST 150   // 固有・セット装備の絵はこの番号から
+#define UI_ICON_FIRST 250             // 画面用のアイコンはこの番号から
+#define UI_ICON_DUNGEONS 0
+#define UI_ICON_SHOP 1
+#define UI_ICON_STATUS 2
+#define UI_ICON_STASH 3
+#define UI_ICON_SMITH 4
+#define UI_ICON_APPRAISER 5
+#define UI_ICON_LOST_GEAR 6
+#define UI_ICON_CODEX 7
+#define UI_ICON_SETTINGS 8
+#define UI_ICON_PORTAL 9
+#define UI_ICON_WALK_BACK 10
+#define UI_ICON_POTION 11
+#define UI_ICON_PORTAL_SCROLL 12
+#define UI_ICON_IDENTIFY_SCROLL 13
 
 // 名前: item_names.bin は 1つ 21 バイト（20文字 + 終端）
 #define ITEM_NAME_RECORD 21

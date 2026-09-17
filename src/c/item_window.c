@@ -85,15 +85,25 @@ static void draw_content(Layer *layer, GContext *ctx) {
   static char stat[32];
   Pen p = { ctx, b.size.w, 0 };
 
-  // アイコンと名前（名前は長ければ折り返す）
-  int name_x = ITEM_ICON_SIZE + 2 * PX;
+  // 大きなアイコン（2倍）をレア度の色の枠で囲み、その右に名前（長ければ折り返す）
+  const int big = ITEM_ICON_SIZE * 2;
+  const int frame = big + 4 * PX;
+  GColor rarity = gfx_rarity_color(it);
+  GColor frame_color = it->rarity == RARITY_NORMAL ? THEME_DIM : rarity;
+  graphics_context_set_fill_color(ctx, frame_color);
+  graphics_fill_rect(ctx, GRect(PX, -s_scroll, frame - 2 * PX, PX), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(PX, -s_scroll + frame - PX, frame - 2 * PX, PX), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(0, -s_scroll + PX, PX, frame - 2 * PX), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(frame - PX, -s_scroll + PX, PX, frame - 2 * PX), 0, GCornerNone);
+  gfx_draw_item_scaled(ctx, it, 2 * PX, -s_scroll + 2 * PX, 2 * PX);
+  if (gfx_item_has_glow(it)) {
+    gfx_draw_twinkle(ctx, frame - PX, -s_scroll, 2, rarity);
+  }
+  int name_x = frame + 2 * PX;
   game_item_name(it, buf, sizeof(buf));
   int name_h = gfx_text_lines(buf, b.size.w - name_x) * LINE_H;
-  gfx_draw_item(ctx, it, 0, -s_scroll);
-  gfx_draw_item_glow(ctx, it, 0, -s_scroll, 0);
-  gfx_text(ctx, buf, GRect(name_x, -s_scroll, b.size.w - name_x, name_h), GTextAlignmentLeft,
-           gfx_rarity_color(it));
-  p.y = (name_h > ITEM_ICON_SIZE ? name_h : ITEM_ICON_SIZE) + PX;
+  gfx_text(ctx, buf, GRect(name_x, -s_scroll + PX, b.size.w - name_x, name_h), GTextAlignmentLeft, rarity);
+  p.y = (name_h > frame ? name_h : frame) + PX;
 
   bool identified = game_item_identified(it);
   const ShapeDef *sh = game_item_shape(it);
@@ -227,7 +237,6 @@ static void click_config(void *ctx) {
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
-  gfx_items_acquire();
   s_frame = layer_create(b);
   layer_set_update_proc(s_frame, draw_frame);
   layer_add_child(root, s_frame);
@@ -244,7 +253,6 @@ static void window_unload(Window *window) {
   layer_destroy(s_content);
   layer_destroy(s_frame);
   s_content = s_frame = NULL;
-  gfx_items_release();
   window_destroy(window);
   s_window = NULL;
 }

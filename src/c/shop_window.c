@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "game.h"
 #include "gfx.h"
+#include "item_art.h"
 #include <stdlib.h>
 
 // ============================================================
@@ -273,19 +274,19 @@ static void list_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
   RowSpec row = { .icon = -1 };
   if (s_mode == LIST_BUY) {
     if (index->row == BUY_POTION) {
-      row.icon = 12;
+      row.icon = UI_ICON_POTION;
       row.title = "Potion";
       snprintf(sub, sizeof(sub), "%dG Heal 50%%", POTION_PRICE);
       snprintf(right, sizeof(right), "%d/%d", game_potions(), MAX_POTIONS);
       row.warn_sub = game_gold() < POTION_PRICE;
     } else if (index->row == BUY_PORTAL) {
-      row.icon = 15;
+      row.icon = UI_ICON_PORTAL_SCROLL;
       row.title = "Portal Scroll";
       snprintf(sub, sizeof(sub), "%dG To town", PORTAL_PRICE);
       snprintf(right, sizeof(right), "%d/%d", game_portals(), MAX_PORTALS);
       row.warn_sub = game_gold() < PORTAL_PRICE;
     } else if (index->row == BUY_IDENT) {
-      row.icon = 13;
+      row.icon = UI_ICON_IDENTIFY_SCROLL;
       row.title = "Identify Scroll";
       snprintf(sub, sizeof(sub), "%dG Reveals gear", IDENT_SCROLL_PRICE);
       snprintf(right, sizeof(right), "%d/%d", game_identify_scrolls(), MAX_IDENT_SCROLLS);
@@ -364,7 +365,6 @@ static void list_long_select(MenuLayer *menu, MenuIndex *index, void *data) {
 static void list_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
-  gfx_items_acquire();
   s_face = gfx_keeper_acquire();
 
   s_list_header = layer_create(GRect(0, 0, b.size.w, LIST_HEADER_H));
@@ -394,7 +394,6 @@ static void list_window_unload(Window *window) {
   s_list_header = NULL;
   s_face = NULL;            // 実体は gfx 側が持っているので破棄しない
   gfx_keeper_release();
-  gfx_items_release();
   window_destroy(window);
   s_list_window = NULL;
 }

@@ -165,6 +165,9 @@ int game_run_dungeon(void);
 int game_floor(void);              // 今いる階（1〜）
 int game_steps_to_next_floor(void);
 int game_return_left(void);
+// ダンジョンの中での位置（入口からの歩数）と、最深部までの歩数
+int game_run_position(void);
+int game_run_total_steps(void);
 bool game_dungeon_unlocked(int idx);
 bool game_dungeon_cleared(int idx);
 bool game_depart(int idx);

@@ -34,7 +34,9 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     .bitmap = unlocked ? s_enemy_sub[d->art] : NULL,
     .title = unlocked ? d->name : "???",
     .sub = sub,
-    .right = game_dungeon_cleared(i) ? "*" : NULL,
+    .right = game_dungeon_cleared(i) ? "CLEAR" : NULL,
+    .tint_right = true,
+    .right_color = THEME_GOLD,
     .dim = !unlocked,
     .warn_sub = !unlocked,
   };

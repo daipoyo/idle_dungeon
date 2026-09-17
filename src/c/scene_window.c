@@ -164,20 +164,57 @@ static void draw_status(GContext *ctx, const Layout *L) {
   graphics_fill_rect(ctx, GRect(bar_x, y + PX, filled, 3 * PX), 0, GCornerNone);
   y += LINE_H;
 
-  // 2行目
+  // 2行目: 左に今いる所、右に消耗品の数、ダンジョンではその間に奥行きのバー
   RunMode mode = game_run_mode();
+  GColor label_color = THEME_SUB;
   if (mode == RUN_EXPLORE) {
     const DungeonDef *d = &g_dungeons[game_run_dungeon()];
-    int next = game_steps_to_next_floor();
-    if (next > 0) snprintf(buf, sizeof(buf), "F%d/%d  NEXT %d", game_floor(), d->floors, next);
-    else snprintf(buf, sizeof(buf), "F%d/%d  BOSS", game_floor(), d->floors);
+    if (game_steps_to_next_floor() > 0) {
+      snprintf(buf, sizeof(buf), "F%d/%d", game_floor(), d->floors);
+    } else {
+      snprintf(buf, sizeof(buf), "BOSS");
+      label_color = GColorRed;
+    }
   } else if (mode == RUN_RETURN) {
-    snprintf(buf, sizeof(buf), "F%d  BACK %d", game_floor(), game_return_left());
+    snprintf(buf, sizeof(buf), "BACK");
+    label_color = THEME_WARN;
   } else {
-    snprintf(buf, sizeof(buf), "LV%d  POT %d  TP %d", game_level(), game_potions(), game_portals());
+    snprintf(buf, sizeof(buf), "LV%d", game_level());
+    label_color = THEME_GOLD;
   }
-  gfx_text(ctx, buf, GRect(x, y, w, LINE_H), PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft),
-           mode == RUN_RETURN ? THEME_WARN : THEME_SUB);
+  int label_w = gfx_text_width(buf) + 3 * PX;
+  gfx_text(ctx, buf, GRect(x, y, label_w, LINE_H), GTextAlignmentLeft, label_color);
+
+  // 右端から消耗品の数（町では鑑定の巻物も）
+  int items = mode == RUN_NONE ? 3 : 2;
+  int counts_w = items * MINI_COUNT_W;
+  int cx = x + w - counts_w;
+  cx = gfx_draw_mini_count(ctx, MINI_POTION, game_potions(), cx, y, THEME_FG);
+  cx = gfx_draw_mini_count(ctx, MINI_PORTAL, game_portals(), cx, y, THEME_FG);
+  if (mode == RUN_NONE) gfx_draw_mini_count(ctx, MINI_IDENTIFY, game_identify_scrolls(), cx, y, THEME_FG);
+
+  if (mode == RUN_NONE) return;
+  // 奥行きのバー: 奥へ進むときは入口からの位置、帰り道は町までの残り。階の境目に切れ目
+  int depth_x = x + label_w;
+  int depth_w = SNAP(w - label_w - counts_w - 2 * PX);
+  int total = game_run_total_steps();
+  if (depth_w < 8 * PX || total <= 0) return;
+  int pos = mode == RUN_RETURN ? game_return_left() : game_run_position();
+  if (pos > total) pos = total;
+  int by = y + PX;
+  graphics_context_set_fill_color(ctx, THEME_DIM);
+  graphics_fill_rect(ctx, GRect(depth_x, by, depth_w, 3 * PX), 0, GCornerNone);
+  graphics_context_set_fill_color(ctx, mode == RUN_RETURN ? THEME_WARN : GColorPictonBlue);
+  graphics_fill_rect(ctx, GRect(depth_x, by, SNAP(depth_w * pos / total), 3 * PX), 0, GCornerNone);
+  const DungeonDef *d = &g_dungeons[game_run_dungeon()];
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  for (int f = 1; f < d->floors; f++) {
+    int fx = depth_x + SNAP(depth_w * f / d->floors);
+    if (d->floors * 2 * PX <= depth_w) graphics_fill_rect(ctx, GRect(fx, by, PX, 3 * PX), 0, GCornerNone);
+  }
+  // 最深部（ボス）の印
+  graphics_context_set_fill_color(ctx, GColorRed);
+  graphics_fill_rect(ctx, GRect(depth_x + depth_w - PX, by - PX, PX, 5 * PX), 0, GCornerNone);
 }
 
 // ログの色（最新の1件 / それより古いもの）

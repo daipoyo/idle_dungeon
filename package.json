@@ -23,7 +23,6 @@
     "resources": {
       "media": [
         { "type": "bitmap", "name": "IMG_APP_ICON", "file": "images/app_icon.png", "menuIcon": true },
-        { "type": "bitmap", "name": "IMG_ITEMS", "file": "images/items.png" },
         { "type": "bitmap", "name": "IMG_CHEST", "file": "images/chest.png" },
         { "type": "bitmap", "name": "IMG_ENEMY0", "file": "images/enemy0.png" },
         { "type": "bitmap", "name": "IMG_ENEMY1", "file": "images/enemy1.png" },

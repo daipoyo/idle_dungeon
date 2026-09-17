@@ -96,7 +96,6 @@ static void select_long_click(MenuLayer *menu, MenuIndex *index, void *data) {
 
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
-  gfx_items_acquire();
   s_message = NULL;
   s_menu = menu_layer_create(layer_get_bounds(root));
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks){
@@ -115,7 +114,6 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
-  gfx_items_release();
   window_destroy(window);
   s_window = NULL;
 }
