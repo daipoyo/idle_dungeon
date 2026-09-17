@@ -62,6 +62,13 @@ void gfx_draw_item_icon(GContext *ctx, int icon, int x, int y);
 // 未鑑定の固有・セット装備は、正体が分からないよう元の形の絵で描く
 #define ITEM_ICON_SIZE (12 * PX)
 void gfx_draw_item(GContext *ctx, const Item *it, int x, int y);
+// 固有・セット装備の飾り: アイコンの四隅の枠（金・緑）と、角で瞬くきらめき。
+//   きらめきは固有装備と、3部位そろったセット装備だけ。frame はアニメーションのコマ
+bool gfx_item_has_glow(const Item *it);
+void gfx_draw_item_glow(GContext *ctx, const Item *it, int x, int y, int frame);
+void gfx_set_glow_frame(int frame);   // 一覧の行（gfx_draw_row）で使うコマ
+// 十字の星のきらめき（中心 cx, cy）。phase で大きさが 点→小→大→小 と脈打つ
+void gfx_draw_twinkle(GContext *ctx, int cx, int cy, int phase, GColor color);
 // 性能の短い文字列（"ATK+12 HP+5"）
 void gfx_item_stat_text(const Item *it, char *buf, size_t size);
 // レア度の色（白・青・黄・緑・金）
@@ -87,6 +94,8 @@ typedef struct {
   bool warn_sub;       // サブテキストを警告色にする
   bool tint_title;     // タイトルをレア度の色で描く
   GColor title_color;
+  bool tint_right;     // 右端の文字を right_color で描く（セットの部位数など）
+  GColor right_color;
 } RowSpec;
 void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row);
 // アイテム1個分の行（アイコン・レア度の色の名前・性能。未鑑定なら警告色）を row に詰める。
@@ -104,7 +113,8 @@ void gfx_draw_heart(GContext *ctx, int x, int y);        // 左上座標。文�
 void gfx_draw_cursor(GContext *ctx, int x, int y, GColor color);  // 右向き三角
 void gfx_draw_spark(GContext *ctx, int cx, int cy);
 void gfx_draw_poof(GContext *ctx, int cx, int cy, int frame);
-// ウィンドウ枠（黒地に白い線）
+// ウィンドウ枠（黒地に白い線）。_color は線の色を変えたもの
 void gfx_draw_window(GContext *ctx, GRect r);
+void gfx_draw_window_color(GContext *ctx, GRect r, GColor line);
 // ウィンドウ枠の内側（文字を置ける範囲）
 GRect gfx_window_inner(GRect r);

@@ -299,6 +299,63 @@ GColor gfx_rarity_color(const Item *it) {
   }
 }
 
+static int s_glow_frame;
+
+void gfx_set_glow_frame(int frame) { s_glow_frame = frame; }
+
+bool gfx_item_has_glow(const Item *it) {
+  return it && game_item_special(it) >= 0 && game_item_identified(it);
+}
+
+static void glow_dot(GContext *ctx, int x, int y) {
+  graphics_fill_rect(ctx, GRect(x, y, PX, PX), 0, GCornerNone);
+}
+
+void gfx_draw_item_glow(GContext *ctx, const Item *it, int x, int y, int frame) {
+  if (!gfx_item_has_glow(it)) return;
+  GColor color = gfx_rarity_color(it);
+  const int e = ITEM_ICON_SIZE - PX;
+
+  // 四隅の L 字
+  graphics_context_set_fill_color(ctx, color);
+  static const int8_t CORNER[4][2] = { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } };
+  for (int c = 0; c < 4; c++) {
+    int cx = x + CORNER[c][0] * e, cy = y + CORNER[c][1] * e;
+    int dx = CORNER[c][0] ? -PX : PX, dy = CORNER[c][1] ? -PX : PX;
+    glow_dot(ctx, cx, cy);
+    glow_dot(ctx, cx + dx, cy);
+    glow_dot(ctx, cx, cy + dy);
+  }
+
+  // きらめき: 固有装備と、そろったセットだけ。右上と左下の角で、交互に瞬く
+  bool sparkle = it->rarity == RARITY_UNIQUE || game_set_pieces_equipped(it) >= 3;
+  if (!sparkle) return;
+  gfx_draw_twinkle(ctx, x + e, y, frame, color);
+  gfx_draw_twinkle(ctx, x, y + e, frame + 2, color);
+}
+
+// 十字の星。phase で大きさが 点 → 小 → 大 → 小 と脈打つ
+void gfx_draw_twinkle(GContext *ctx, int cx, int cy, int phase, GColor color) {
+  static const uint8_t SIZE[4] = { 0, 1, 2, 1 };
+  int size = SIZE[((phase % 4) + 4) % 4];
+  graphics_context_set_fill_color(ctx, color);
+  for (int arm = 1; arm <= size; arm++) {
+    glow_dot(ctx, cx - arm * PX, cy);
+    glow_dot(ctx, cx + arm * PX, cy);
+    glow_dot(ctx, cx, cy - arm * PX);
+    glow_dot(ctx, cx, cy + arm * PX);
+  }
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  glow_dot(ctx, cx, cy);
+  if (size == 2) {
+    // 一番大きいときは、中心のまわりも白く光らせる
+    glow_dot(ctx, cx - PX, cy);
+    glow_dot(ctx, cx + PX, cy);
+    glow_dot(ctx, cx, cy - PX);
+    glow_dot(ctx, cx, cy + PX);
+  }
+}
+
 void gfx_item_row(RowSpec *row, const Item *it, char *name, size_t name_size, char *sub,
                   size_t sub_size) {
   if (!game_item_shape(it)) return;
@@ -374,6 +431,12 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   bool hi = menu_cell_layer_is_highlighted(cell);
   graphics_context_set_fill_color(ctx, THEME_BG);
   graphics_fill_rect(ctx, b, 0, GCornerNone);
+  if (gfx_item_has_glow(row->item)) {
+    // 固有装備は暗い赤、セット装備は暗い緑の帯（上下に1ドットずつ黒い隙間を残す）
+    GColor band = row->item->rarity == RARITY_UNIQUE ? GColorBulgarianRose : GColorDarkGreen;
+    graphics_context_set_fill_color(ctx, band);
+    graphics_fill_rect(ctx, GRect(0, PX, b.size.w, b.size.h - 2 * PX), 0, GCornerNone);
+  }
 
   int x = SNAP(PBL_IF_ROUND_ELSE(b.size.w / 10, 2));
   int right_edge = b.size.w - PBL_IF_ROUND_ELSE(b.size.w / 10, 4);
@@ -385,7 +448,9 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   x += 4 * PX;
 
   if (row->item) {
-    gfx_draw_item(ctx, row->item, x - PX, SNAP((b.size.h - ITEM_ICON_SIZE) / 2));
+    int iy = SNAP((b.size.h - ITEM_ICON_SIZE) / 2);
+    gfx_draw_item(ctx, row->item, x - PX, iy);
+    gfx_draw_item_glow(ctx, row->item, x - PX, iy, s_glow_frame);
     x += ITEM_ICON_SIZE + PX;
   } else if (row->icon >= 0) {
     gfx_draw_item_icon(ctx, row->icon, x, SNAP((b.size.h - ICON_SIZE) / 2));
@@ -407,7 +472,7 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   if (row->right) {
     right_w = gfx_text_width(row->right) + 2 * PX;
     gfx_text(ctx, row->right, GRect(right_edge - right_w, ty, right_w, LINE_H),
-             GTextAlignmentRight, fg);
+             GTextAlignmentRight, (row->tint_right && !row->dim) ? row->right_color : fg);
   }
   gfx_text(ctx, row->title, GRect(x, ty, right_edge - x - right_w, LINE_H), GTextAlignmentLeft, title_fg);
   if (row->sub) {
@@ -495,9 +560,13 @@ void gfx_draw_poof(GContext *ctx, int cx, int cy, int frame) {
 }
 
 void gfx_draw_window(GContext *ctx, GRect r) {
+  gfx_draw_window_color(ctx, r, GColorWhite);
+}
+
+void gfx_draw_window_color(GContext *ctx, GRect r, GColor line) {
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, r, 0, GCornerNone);
-  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_context_set_fill_color(ctx, line);
   int x0 = r.origin.x + PX, y0 = r.origin.y + PX;
   int w = r.size.w - 2 * PX, h = r.size.h - 2 * PX;
   graphics_fill_rect(ctx, GRect(x0 + PX, y0, w - 2 * PX, PX), 0, GCornerNone);

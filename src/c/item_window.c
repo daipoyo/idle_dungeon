@@ -90,6 +90,7 @@ static void draw_content(Layer *layer, GContext *ctx) {
   game_item_name(it, buf, sizeof(buf));
   int name_h = gfx_text_lines(buf, b.size.w - name_x) * LINE_H;
   gfx_draw_item(ctx, it, 0, -s_scroll);
+  gfx_draw_item_glow(ctx, it, 0, -s_scroll, 0);
   gfx_text(ctx, buf, GRect(name_x, -s_scroll, b.size.w - name_x, name_h), GTextAlignmentLeft,
            gfx_rarity_color(it));
   p.y = (name_h > ITEM_ICON_SIZE ? name_h : ITEM_ICON_SIZE) + PX;

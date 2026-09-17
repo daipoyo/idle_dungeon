@@ -9,26 +9,67 @@
 //   セクション2: 持ち物 … 選ぶと装備する（町にいるときだけ）
 // ============================================================
 #define CARD_H (IS_LARGE_SCREEN ? 88 : 80)
+#define GLOW_MS 450   // きらめきのコマ送り（この画面を開いている間だけ）
 
 static Window *s_window;
 static MenuLayer *s_menu;
+static AppTimer *s_glow_timer;
+static int s_glow_frame;
+
+// 装備中の固有装備の数と、一番そろっているセットの部位数
+static void equipped_specials(int *uniques, int *best_set_pieces) {
+  *uniques = 0;
+  *best_set_pieces = 0;
+  for (int slot = 0; slot < EQUIP_SLOTS; slot++) {
+    const Item *it = game_equipped(slot);
+    if (!gfx_item_has_glow(it)) continue;
+    if (it->rarity == RARITY_UNIQUE) (*uniques)++;
+    int pieces = game_set_pieces_equipped(it);
+    if (pieces > *best_set_pieces) *best_set_pieces = pieces;
+  }
+}
+
+// セットボーナスか固有装備があるときは、ステータス欄に1行足す
+static bool card_has_badge(void) {
+  int uniques, pieces;
+  equipped_specials(&uniques, &pieces);
+  return uniques > 0 || pieces >= 2;
+}
+
+static int card_height(void) {
+  return CARD_H + (card_has_badge() ? LINE_H : 0);
+}
 
 static void draw_card(GContext *ctx, const Layer *cell) {
   GRect b = layer_get_bounds(cell);
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, b, 0, GCornerNone);
 
+  int uniques, set_pieces;
+  equipped_specials(&uniques, &set_pieces);
+  bool set_bonus = set_pieces >= 2;
+  // 固有装備なら金、セットボーナスなら緑の枠
+  GColor aura = uniques > 0 ? GColorChromeYellow : (set_bonus ? GColorBrightGreen : GColorWhite);
+
   // 勇者の立ち絵（枠の中に大きめに描く）
   int inset = SNAP(PBL_IF_ROUND_ELSE(b.size.w / 8, 2));
   int scale = 3;
-  int slot_w = 20 * scale, slot_h = CARD_H - 4 * PX;
+  int slot_w = 20 * scale, slot_h = card_height() - 4 * PX;
   GRect slot = GRect(inset, 2 * PX, slot_w, slot_h);
-  gfx_draw_window(ctx, slot);
+  gfx_draw_window_color(ctx, slot, aura);
   graphics_context_set_fill_color(ctx, GColorDarkGreen);
   graphics_fill_rect(ctx, GRect(slot.origin.x + 2 * PX, slot.origin.y + slot_h - 7 * PX,
                                 slot_w - 4 * PX, 5 * PX), 0, GCornerNone);
   int hero_y = slot.origin.y + slot_h - 5 * PX - (HERO_MAP_H - 1) * scale;
   gfx_draw_hero(ctx, slot.origin.x + 3 * scale, hero_y, HERO_POSE_IDLE, scale, false);
+  if (uniques > 0 || set_bonus) {
+    // 勇者のまわりの3か所で、少しずつずれて瞬く
+    static const int8_t SPOT[3][3] = { { 6, 6, 0 }, { 24, 11, 1 }, { 23, 27, 3 } };
+    for (int i = 0; i < 3; i++) {
+      gfx_draw_twinkle(ctx, slot.origin.x + SPOT[i][0] * PX, slot.origin.y + SPOT[i][1] * PX,
+                       s_glow_frame + SPOT[i][2], aura);
+    }
+  }
 
   int x = slot.origin.x + slot_w + 3 * PX;
   int w = b.size.w - x - inset;
@@ -52,6 +93,16 @@ static void draw_card(GContext *ctx, const Layer *cell) {
     snprintf(buf, sizeof(buf), "XP MAX");
   }
   gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, THEME_SUB);
+
+  if (set_bonus) {
+    y += LINE_H;
+    snprintf(buf, sizeof(buf), "SET BONUS %d/3", set_pieces);
+    gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, GColorBrightGreen);
+  } else if (uniques > 0) {
+    y += LINE_H;
+    snprintf(buf, sizeof(buf), "UNIQUE x%d", uniques);
+    gfx_text(ctx, buf, GRect(x, y, w, LINE_H), GTextAlignmentLeft, GColorChromeYellow);
+  }
 }
 
 // ------------------------------------------------------------
@@ -83,7 +134,7 @@ static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void
 }
 
 static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
-  return index->section == 0 ? CARD_H : ROW_H;
+  return index->section == 0 ? card_height() : ROW_H;
 }
 
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *data) {
@@ -114,7 +165,15 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     }
   }
   static char name[40];
+  static char pieces[6];
   gfx_item_row(&row, it, name, sizeof(name), sub, sizeof(sub));
+  // 装備中のセット装備は、そろった部位数を緑で出す（強化値があるときはそちらを優先）
+  if (index->section == 1 && gfx_item_has_glow(it) && game_item_set(it) && !it->plus) {
+    snprintf(pieces, sizeof(pieces), "%d/3", game_set_pieces_equipped(it));
+    row.right = pieces;
+    row.tint_right = true;
+    row.right_color = GColorBrightGreen;
+  }
   if (!game_item_identified(it)) {
     // 未鑑定は巻物で鑑定できる。持っていなければ町の鑑定屋へ
     snprintf(sub, sizeof(sub), "Unidentified");
@@ -132,6 +191,22 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
   }
 }
 
+static bool anything_glows(void) {
+  for (int i = 0; i < EQUIP_SLOTS; i++) if (gfx_item_has_glow(game_equipped(i))) return true;
+  for (int i = 0; i < BAG_SIZE; i++) if (gfx_item_has_glow(game_bag(i))) return true;
+  return false;
+}
+
+static void glow_tick(void *data) {
+  s_glow_timer = NULL;
+  if (!s_menu) return;
+  s_glow_frame++;
+  gfx_set_glow_frame(s_glow_frame);
+  // 飾る物があるときだけ描き直す（なければ待つだけ）
+  if (anything_glows()) layer_mark_dirty(menu_layer_get_layer(s_menu));
+  s_glow_timer = app_timer_register(GLOW_MS, glow_tick, NULL);
+}
+
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   gfx_items_acquire();
@@ -147,9 +222,15 @@ static void window_load(Window *window) {
   });
   gfx_setup_menu(s_menu, window);
   layer_add_child(root, menu_layer_get_layer(s_menu));
+  s_glow_frame = 0;
+  gfx_set_glow_frame(0);
+  s_glow_timer = app_timer_register(GLOW_MS, glow_tick, NULL);
 }
 
 static void window_unload(Window *window) {
+  if (s_glow_timer) app_timer_cancel(s_glow_timer);
+  s_glow_timer = NULL;
+  gfx_set_glow_frame(0);
   menu_layer_destroy(s_menu);
   s_menu = NULL;
   gfx_items_release();
