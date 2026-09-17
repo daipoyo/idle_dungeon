@@ -16,7 +16,9 @@
 #define MAX_LEVEL 50
 #define MAX_POTIONS 5
 #define MAX_PORTALS 9
-#define RESTED_MAX 6000                  // 町にいる間に貯めておける歩数
+#define SLEEP_RESTED_SEC (6 * 60 * 60)      // これ以上眠ると Rested
+#define SLEEP_REFRESHED_SEC (7 * 60 * 60)   // これ以上眠ると Refreshed
+#define SAVED_STEPS_MAX 6000                  // 町にいる間に貯めておける歩数
 #define DROP_EXPIRE_SEC (72 * 60 * 60)   // 死亡時に残した物が消えるまで
 #define POTION_PRICE 25
 #define PORTAL_PRICE 60
@@ -120,7 +122,8 @@ typedef enum {
   LOG_SUMMARY,      // まとめ a=レベル b=戦闘 c=ゴールド d=アイテム
   LOG_IDENTIFY,     // 鑑定した a=レア度 b=基本アイテム
   LOG_UPGRADE,      // 鍛冶屋 a=強化後の段階 b=基本アイテム c=成功なら1
-  LOG_RESTED,       // 出発時に休息歩数を使った b=歩数
+  LOG_SAVED_STEPS,       // 出発時に貯めた歩数を使った b=歩数
+  LOG_SLEEP,        // 睡眠のボーナス a=段階 b=眠った分数
 } LogType;
 
 // レア度の呼び名（White/Blue/Yellow/Green/Gold）
@@ -176,7 +179,11 @@ bool game_depart(int idx);
 bool game_use_portal(void);
 void game_walk_back(void);
 bool game_steps_available(void);
-int32_t game_rested_steps(void);   // 町にいる間に貯めた歩数（次の出発で使う）
+// ---- 睡眠のボーナス（昨夜よく眠れたら、その日は経験値・ゴールドなどが増える） ----
+typedef enum { SLEEP_NONE, SLEEP_RESTED, SLEEP_REFRESHED } SleepTier;
+SleepTier game_sleep_tier(void);
+int game_sleep_minutes(void);
+int32_t game_saved_steps(void);   // 町にいる間に貯めた歩数（次の出発で使う）
 
 // ---- 設定 ----
 int game_auto_return_pct(void);    // 0 = しない

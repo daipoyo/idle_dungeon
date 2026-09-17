@@ -7,6 +7,8 @@
 
 int32_t pctest_steps_today = 0;
 int32_t pctest_day_total = 0;
+int32_t pctest_sleep_today = 0;
+time_t pctest_sleep_start = 0, pctest_sleep_end = 0;
 uint8_t pctest_persist[PCTEST_PERSIST_KEYS][PCTEST_PERSIST_SIZE];
 int pctest_persist_len[PCTEST_PERSIST_KEYS];
 
@@ -517,54 +519,113 @@ static void test_codex(void) {
   check(total < 4000, "save data fits in 4KB");
 }
 
-static void test_rested(void) {
-  puts("Rested steps");
+static void test_saved_steps(void) {
+  puts("Saved steps");
   reset_game(31);
-  check(game_rested_steps() == 0, "a new hero starts with no rested steps");
+  check(game_saved_steps() == 0, "a new hero starts with no saved steps");
   pctest_steps_today += 1200;
   game_update();
-  check(game_rested_steps() == 1200, "steps taken in town are saved up");
+  check(game_saved_steps() == 1200, "steps taken in town are saved up");
   pctest_steps_today += 20000;
   game_update();
-  check(game_rested_steps() == RESTED_MAX, "rested steps stop at the cap");
+  check(game_saved_steps() == SAVED_STEPS_MAX, "saved steps stop at the cap");
 
   // 出発した瞬間に使われる
   s_hero.level = 20;
-  s_hero.rested = 500;
+  s_hero.saved_steps = 500;
   check(game_depart(0), "the hero sets out");
-  check(game_rested_steps() == 0 && game_run_mode() == RUN_EXPLORE && s_run.depth == 500,
-        "rested steps move the hero forward on departure");
+  check(game_saved_steps() == 0 && game_run_mode() == RUN_EXPLORE && s_run.depth == 500,
+        "saved steps move the hero forward on departure");
 
   // 使い切る前に町へ戻ったら、残りはまた貯まる（1500歩で最深部、1500歩で帰り道）
   s_run.mode = RUN_NONE;
-  s_hero.rested = 5000;
+  s_hero.saved_steps = 5000;
   game_depart(0);
-  printf("  5000 rested steps on a 1500-step dungeon: mode %d, %ld left over\n", game_run_mode(),
-         (long)game_rested_steps());
-  check(game_run_mode() == RUN_NONE && game_rested_steps() == 2000, "leftover rested steps are kept");
+  printf("  5000 saved steps on a 1500-step dungeon: mode %d, %ld left over\n", game_run_mode(),
+         (long)game_saved_steps());
+  check(game_run_mode() == RUN_NONE && game_saved_steps() == 2000, "leftover saved steps are kept");
 
   // 歩いている途中で町に着いたら、その日の残りの歩数も貯まる
-  s_hero.rested = 0;
+  s_hero.saved_steps = 0;
   game_depart(0);
   pctest_steps_today += 4000;
   game_update();
-  check(game_run_mode() == RUN_NONE && game_rested_steps() == 1000,
+  check(game_run_mode() == RUN_NONE && game_saved_steps() == 1000,
         "steps left after reaching town are saved for the next run");
 
   game_save();
-  s_hero.rested = 0;
+  s_hero.saved_steps = 0;
   game_init();
-  check(game_rested_steps() == 1000, "rested steps survive a reload");
+  check(game_saved_steps() == 1000, "saved steps survive a reload");
 
-  // 休息歩数ができる前のセーブ（Hero が 20 バイト）も、そのまま読める
+  // 貯めた歩数ができる前のセーブ（Hero が 20 バイト）も、そのまま読める
   pctest_persist_len[KEY_HERO] = 20;
   memset(&s_hero, 0, sizeof(s_hero));
   game_init();
-  check(s_hero.level == 20 && game_rested_steps() == 0 && game_remind_hour() == 0,
-        "older saves load with no rested steps and the reminder off");
+  check(s_hero.level == 20 && game_saved_steps() == 0 && game_remind_hour() == 0,
+        "older saves load with no saved steps and the reminder off");
 
   game_cycle_remind();
   check(game_remind_hour() == 6, "the reminder cycles through hours");
+}
+
+static void test_sleep(void) {
+  puts("Sleep bonus");
+  reset_game(41);
+  time_t today = steps_day_start(time(NULL));
+  pctest_sleep_today = 0;
+  pctest_sleep_start = pctest_sleep_end = 0;
+  game_update();
+  check(game_sleep_tier() == SLEEP_NONE, "no sleep data, no bonus");
+
+  // 23時〜6時半（日付をまたいだ7時間半）: 今日の合計は6時間半しかないが、眠りの記録から数える
+  pctest_sleep_start = today - 1 * SECONDS_PER_HOUR;
+  pctest_sleep_end = today + 6 * SECONDS_PER_HOUR + 30 * SECONDS_PER_MINUTE;
+  pctest_sleep_today = 6 * SECONDS_PER_HOUR + 30 * SECONDS_PER_MINUTE;
+  bool before_noon = time(NULL) >= pctest_sleep_end;
+  s_hero.sleep_day = 0;   // 日が変わった扱いにして、すぐに記録を見に行かせる（ふだんは数分に1回）
+  game_update();
+  if (before_noon) {
+    check(game_sleep_tier() == SLEEP_REFRESHED && game_sleep_minutes() == 450,
+          "7.5 hours across midnight counts as Refreshed");
+    char buf[64];
+    game_log_text(0, buf, sizeof(buf));   // 0 が一番新しい
+    printf("  log: %s\n", buf);
+    check(strstr(buf, "Slept 7h30m. Refreshed!") != NULL, "the log says how long the hero slept");
+  } else {
+    puts("  (skipped the across-midnight check: too early in the day)");
+  }
+
+  // 効果: 経験値・ゴールド +20%、マジック発見 +10
+  check(sleep_bonus(FX_XP) == 20 && sleep_bonus(FX_GOLD) == 20 && sleep_bonus(FX_MAGIC) == 10,
+        "Refreshed gives XP/Gold +20% and magic find +10");
+
+  // 6時間台は Rested
+  s_hero.sleep_day = 0;
+  pctest_sleep_start = pctest_sleep_end = 0;
+  pctest_sleep_today = 6 * SECONDS_PER_HOUR + 10 * SECONDS_PER_MINUTE;
+  game_update();
+  check(game_sleep_tier() == SLEEP_RESTED && sleep_bonus(FX_XP) == 10 && sleep_bonus(FX_MAGIC) == 0,
+        "6 hours gives Rested (+10%)");
+
+  // 次の日になると消える
+  s_hero.sleep_day -= SECONDS_PER_DAY;
+  check(game_sleep_tier() == SLEEP_NONE && sleep_bonus(FX_GOLD) == 0, "the bonus ends when the day changes");
+
+  // 5時間では何もない
+  pctest_sleep_today = 5 * SECONDS_PER_HOUR;
+  game_update();
+  check(game_sleep_tier() == SLEEP_NONE, "5 hours gives no bonus");
+
+  game_save();
+  pctest_sleep_today = 7 * SECONDS_PER_HOUR;
+  s_hero.sleep_day = 0;
+  game_update();
+  game_save();
+  s_hero.sleep_tier = 0;
+  game_init();
+  check(game_sleep_tier() == SLEEP_REFRESHED, "the bonus survives a reload");
+  pctest_sleep_today = 0;
 }
 
 // 実際に歩いて遊んだときの様子（バランス確認）
@@ -579,7 +640,7 @@ static void play_days(int days, int margin, bool verbose) {
     for (int d = 0; d < DUNGEON_COUNT; d++) {
       if (game_dungeon_unlocked(d) && g_dungeons[d].lvl_max <= game_level() + margin) pick = d;
     }
-    int before_deaths = s_hero.deaths;   // 出発した瞬間に休息歩数で倒れることもある
+    int before_deaths = s_hero.deaths;   // 出発した瞬間に貯めた歩数で倒れることもある
     if (game_run_mode() == RUN_NONE && game_depart(pick)) runs++;
     pctest_steps_today += 4000;
     game_update();
@@ -624,7 +685,8 @@ int main(void) {
   test_stash();
   test_blacksmith();
   test_codex();
-  test_rested();
+  test_saved_steps();
+  test_sleep();
   test_play_balance();
   printf("\n%s (%d failure%s)\n", s_failures ? "FAILED" : "ALL PASSED", s_failures,
          s_failures == 1 ? "" : "s");

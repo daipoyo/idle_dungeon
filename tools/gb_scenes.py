@@ -311,29 +311,53 @@ def house(cv, x, w, h, roof, wall, door=True):
         cv.rect(cx + 1, base - 5, 2, 5, 'o')
 
 
-def town():
+def light_house(cv, x, w, h):
+    """夜: 家の窓と戸口に明かりをともす（house と同じ位置）。"""
+    base = TOWN_H - GROUND_H
+    top = base - h
+    for wx in range(x + 3, x + w - 4, 6):
+        cv.px(wx + 1, top + 4, 'Y')
+        cv.px(wx + 1, top + 6, 'A')   # 窓の明かりが壁にこぼれる
+    cx = x + w // 2 - 2
+    cv.rect(cx + 1, base - 5, 2, 5, 'b')
+    cv.px(cx + 1, base - 5, 'y')
+
+
+# 夜の色の置き換え（昼の絵を描いてから、空・丘・壁・屋根・石畳を暗くする）
+NIGHT_COLORS = {
+    'u': 'N',            # 空
+    'G': 'd', 'j': 't',  # 丘
+    'l': 'i', 's': 'X',  # 壁（明るい面と影）、橙の屋根の影
+    'W': 'I', 'g': 'i',  # 白い壁、石畳
+    'r': 'b', 'R': 'r',  # 赤い屋根
+    'o': 'P',            # 橙の屋根
+    'E': 't',            # 木の葉
+    'k': 'N',            # 石畳の影
+}
+
+
+def town(night=False):
     cv = Grid(TOWN_W, TOWN_H, 'u', wrap=False)
-    # 雲
-    for cx, cy in ((12, 6), (58, 3), (104, 8)):
-        cv.rect(cx, cy + 1, 12, 3, 'W')
-        cv.rect(cx + 3, cy, 6, 1, 'W')
-        cv.hline(cx + 1, cx + 10, cy + 4, 'C')
+    if not night:
+        # 雲
+        for cx, cy in ((12, 6), (58, 3), (104, 8)):
+            cv.rect(cx, cy + 1, 12, 3, 'W')
+            cv.rect(cx + 3, cy, 6, 1, 'W')
+            cv.hline(cx + 1, cx + 10, cy + 4, 'C')
     # 丘
     for x in range(TOWN_W):
         h = 10 + int(4 * abs(((x % 40) - 20) / 20.0))
         cv.vline(x, TOWN_H - GROUND_H - h, TOWN_H - GROUND_H - 1, 'G')
         cv.px(x, TOWN_H - GROUND_H - h, 'j')
-    house(cv, 2, 20, 16, ('r', 'R'), ('l', 's'))
-    house(cv, 26, 16, 12, ('o', 's'), ('W', 'g'))
-    # お店（中央、看板付き）
-    house(cv, 52, 26, 18, ('R', 'r'), ('l', 's'))
-    sx, sy = 57, TOWN_H - GROUND_H - 12
-    cv.rect(sx, sy, 16, 4, 'K')
-    cv.rect(sx + 1, sy + 1, 14, 2, 'y')
-    for i in range(0, 14, 3):
-        cv.px(sx + 2 + i, sy + 2, 'r')
-    house(cv, 88, 16, 12, ('o', 's'), ('W', 'g'))
-    house(cv, 108, 20, 16, ('r', 'R'), ('l', 's'))
+    houses = [
+        (2, 20, 16, ('r', 'R'), ('l', 's')),
+        (26, 16, 12, ('o', 's'), ('W', 'g')),
+        (52, 26, 18, ('R', 'r'), ('l', 's')),   # お店（中央、看板付き）
+        (88, 16, 12, ('o', 's'), ('W', 'g')),
+        (108, 20, 16, ('r', 'R'), ('l', 's')),
+    ]
+    for hx, hw, hh, roof, wall in houses:
+        house(cv, hx, hw, hh, roof, wall)
     # 木
     for tx in (46, 83, 128):
         base = TOWN_H - GROUND_H
@@ -343,4 +367,61 @@ def town():
         cv.px(tx, base - 9, 'j')
     # 石畳
     ground_tiles(cv, TOWN_H - GROUND_H, ('K', 'k', 'g', 'W'), tw=6, seed=51)
+
+    if night:
+        for y in range(cv.h):
+            for x in range(cv.w):
+                cv.g[y][x] = NIGHT_COLORS.get(cv.g[y][x], cv.g[y][x])
+        # 地平線に近い空は少し明るい（市松模様で混ぜる）
+        for y in range(26, 40):
+            for x in range(cv.w):
+                if cv.g[y][x] != 'N':
+                    continue
+                if (y >= 32 and (x + y) % 2 == 0) or (y < 32 and x % 4 == (y * 2) % 4 and y % 2 == 0):
+                    cv.g[y][x] = 'n'
+        # 星（月のまわりはあける）
+        mx, my = 112, 4
+        for y in range(0, 26):
+            for x in range(cv.w):
+                v = rand(x, y, 77)
+                near_moon = mx - 3 <= x <= mx + 9 and y <= my + 9
+                if cv.g[y][x] == 'N' and v > 0.985 and not near_moon:
+                    cv.px(x, y, 'W' if v > 0.994 else 'I')
+        # 三日月
+        moon = [
+            '..lll..',
+            '.lYY...',
+            'lYY....',
+            'lYY....',
+            'lYY....',
+            '.lYY...',
+            '..lll..',
+        ]
+        for yy, row in enumerate(moon):
+            for xx, ch in enumerate(row):
+                if ch != '.':
+                    cv.px(mx + xx, my + yy, ch)
+        # 窓に明かりをともして描き直す
+        for hx, hw, hh, roof, wall in houses:
+            light_house(cv, hx, hw, hh)
+
+    # お店の看板（夜も明るい）
+    sx, sy = 57, TOWN_H - GROUND_H - 12
+    cv.rect(sx, sy, 16, 4, 'K')
+    cv.rect(sx + 1, sy + 1, 14, 2, 'y')
+    for i in range(0, 14, 3):
+        cv.px(sx + 2 + i, sy + 2, 'r')
+
+    if night:
+        # 街灯（お店の左右）と足もとの明かり
+        base = TOWN_H - GROUND_H
+        for lx in (48 + 2, 82 - 1):
+            cv.vline(lx, base - 13, base - 1, 'K')
+            cv.rect(lx - 1, base - 16, 3, 3, 'K')
+            cv.px(lx, base - 15, 'Y')
+            cv.px(lx - 1, base - 14, 'y')
+            cv.px(lx + 1, base - 14, 'y')
+            for gx in range(lx - 3, lx + 4):
+                if cv.get(gx, base) is not None and abs(gx - lx) <= 3:
+                    cv.px(gx, base, 'A' if abs(gx - lx) <= 1 else 'i')
     return cv.g

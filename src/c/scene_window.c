@@ -11,6 +11,7 @@
 
 #define UPDATE_MS 5000
 #define KIND_TOWN DUNGEON_COUNT
+#define KIND_TOWN_NIGHT (DUNGEON_COUNT + 1)
 
 static Window *s_window;
 static Layer *s_canvas;
@@ -82,8 +83,8 @@ static void ensure_art(int kind) {
   if (kind == s_art_kind) return;
   unload_art();
   s_art_kind = kind;
-  if (kind == KIND_TOWN) {
-    s_bg = gbitmap_create_with_resource(RESOURCE_ID_IMG_BG_TOWN);
+  if (kind == KIND_TOWN || kind == KIND_TOWN_NIGHT) {
+    s_bg = gbitmap_create_with_resource(kind == KIND_TOWN ? RESOURCE_ID_IMG_BG_TOWN : RESOURCE_ID_IMG_BG_TOWN_NIGHT);
     return;
   }
   s_bg = gbitmap_create_with_resource(BG_RES[g_dungeons[kind].art]);
@@ -101,8 +102,12 @@ static void draw_art(GContext *ctx, const Layout *L) {
   int hero_x;
   int foot_y = L->art_bot - PX;
   if (mode == RUN_NONE) {
-    ensure_art(KIND_TOWN);
-    graphics_context_set_fill_color(ctx, gfx_argb(BG_TOWN_FILL));
+    // 町は 18時〜6時は夜の絵（5秒ごとの更新で描き直すので、時刻が変われば切り替わる）
+    time_t now = time(NULL);
+    int hour = localtime(&now)->tm_hour;
+    bool night = hour >= 18 || hour < 6;
+    ensure_art(night ? KIND_TOWN_NIGHT : KIND_TOWN);
+    graphics_context_set_fill_color(ctx, gfx_argb(night ? BG_TOWN_NIGHT_FILL : BG_TOWN_FILL));
     graphics_fill_rect(ctx, area, 0, GCornerNone);
     graphics_draw_bitmap_in_rect(ctx, s_bg, GRect(SNAP((L->w - BG_TOWN_W) / 2), L->art_bot - BG_TOWN_H,
                                                    BG_TOWN_W, BG_TOWN_H));
@@ -184,6 +189,12 @@ static void draw_status(GContext *ctx, const Layout *L) {
   }
   int label_w = gfx_text_width(buf) + 3 * PX;
   gfx_text(ctx, buf, GRect(x, y, label_w, LINE_H), GTextAlignmentLeft, label_color);
+  // 睡眠のボーナスが効いている日は、ラベルの横に三日月
+  SleepTier sleep = game_sleep_tier();
+  if (sleep) {
+    gfx_draw_mini_icon(ctx, sleep == SLEEP_REFRESHED ? MINI_MOON_REFRESHED : MINI_MOON_RESTED, x + label_w - PX, y);
+    label_w += 6 * PX;
+  }
 
   // 右端から消耗品の数（町では鑑定の巻物も）
   int items = mode == RUN_NONE ? 3 : 2;

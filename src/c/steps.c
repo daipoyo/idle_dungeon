@@ -3,10 +3,12 @@
 // 何日分さかのぼって数えるか（それより前は数えない）
 #define MAX_DAYS_BACK 7
 
-static time_t start_of_day(time_t t) {
+time_t steps_day_start(time_t t) {
   struct tm *tm = localtime(&t);
   return t - tm->tm_hour * SECONDS_PER_HOUR - tm->tm_min * SECONDS_PER_MINUTE - tm->tm_sec;
 }
+
+static time_t start_of_day(time_t t) { return steps_day_start(t); }
 
 bool steps_available(void) {
 #if defined(PBL_HEALTH)
@@ -62,4 +64,37 @@ int32_t steps_since(StepSnapshot *snap) {
   snap->day = (uint32_t)today;
   snap->steps = now_steps;
   return delta;
+}
+
+#if defined(PBL_HEALTH)
+typedef struct {
+  time_t from, to;
+  int32_t seconds;
+} SleepSum;
+
+static bool add_sleep(HealthActivity activity, time_t start, time_t end, void *context) {
+  SleepSum *sum = context;
+  if (start < sum->from) start = sum->from;
+  if (end > sum->to) end = sum->to;
+  if (end > start) sum->seconds += (int32_t)(end - start);
+  return true;
+}
+#endif
+
+int32_t steps_last_night_sleep(void) {
+#if defined(PBL_HEALTH)
+  time_t now = time(NULL);
+  time_t today = start_of_day(now);
+  SleepSum sum = { today - 6 * SECONDS_PER_HOUR, today + 12 * SECONDS_PER_HOUR, 0 };
+  if (sum.to > now) sum.to = now;
+  if (sum.to > sum.from) {
+    health_service_activities_iterate(HealthActivitySleep, sum.from, sum.to, HealthIterationDirectionFuture,
+                                      add_sleep, &sum);
+  }
+  // 眠りの記録が取れない場合に備えて、今日の睡眠の合計とくらべて多い方を使う
+  int32_t today_total = health_service_sum_today(HealthMetricSleepSeconds);
+  return sum.seconds > today_total ? sum.seconds : today_total;
+#else
+  return 0;
+#endif
 }

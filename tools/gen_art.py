@@ -85,6 +85,7 @@ def write_art_info(fills):
     for i in range(6):
         lines.append('#define BG_DUNGEON%d_FILL 0x%02X' % (i, argb8(fills['bg_dungeon%d' % i])))
     lines.append('#define BG_TOWN_FILL 0x%02X' % argb8(fills['bg_town']))
+    lines.append('#define BG_TOWN_NIGHT_FILL 0x%02X' % argb8(fills['bg_town_night']))
     lines.append('')
     lines.append('#define BG_TILE_W %d' % (gb_scenes.TILE_W * PX))
     lines.append('#define BG_FAR_H %d' % (gb_scenes.FAR_H * PX))
@@ -195,6 +196,10 @@ def main():
     scenes['bg_town'] = grid_image(town)
     fills['bg_town'] = gb_scenes.top_color(town)
     out('bg_town.png', scenes['bg_town'])
+    town_night = gb_scenes.town(night=True)
+    scenes['bg_town_night'] = grid_image(town_night)
+    fills['bg_town_night'] = gb_scenes.top_color(town_night)
+    out('bg_town_night.png', scenes['bg_town_night'])
 
     # --- 施設の人物の顔（一覧の見出しに出す） ---
     faces = {'keeper': grid_image(gb_sprites.keeper_face())}
@@ -345,6 +350,7 @@ def write_previews(d, enemies, chests, scenes, faces, frames, weapons):
         img = scenes['bg_dungeon%d' % i]
         upscale(sheet([img, img], 2, img.width, img.height), 2).save(os.path.join(d, 'pv_bg_dungeon%d.png' % i))
     upscale(scenes['bg_town'], 2).save(os.path.join(d, 'pv_bg_town.png'))
+    upscale(scenes['bg_town_night'], 2).save(os.path.join(d, 'pv_bg_town_night.png'))
     row = new_image(len(faces) * 52, 44)
     for i, img in enumerate(faces.values()):
         row.alpha_composite(img, (i * 52, 0))

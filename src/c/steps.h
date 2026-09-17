@@ -14,6 +14,10 @@ typedef struct {
 } StepSnapshot;
 
 bool steps_available(void);
+// その日の 0時
+time_t steps_day_start(time_t t);
+// 昨夜の睡眠（秒）。前日18時〜今日12時の睡眠の記録を足す（日付をまたいだ分も数える）
+int32_t steps_last_night_sleep(void);
 // 今の歩数を記録する（出発時に呼ぶ）
 void steps_snapshot(StepSnapshot *snap);
 // 前回の記録からの歩数を返し、記録を更新する

@@ -556,7 +556,7 @@ void gfx_draw_cursor(GContext *ctx, int x, int y, GColor color) {
   gfx_text(ctx, "}", GRect(x, y, 4 * PX, LINE_H), GTextAlignmentLeft, color);
 }
 
-static const char *const MINI_ICONS[3][5] = {
+static const char *const MINI_ICONS[5][5] = {
   {  // ポーション（赤い薬の瓶）
     "..g..",
     ".gRg.",
@@ -577,6 +577,20 @@ static const char *const MINI_ICONS[3][5] = {
     "lllll",
     "lAARl",
     "lllll",
+  },
+  {  // 睡眠のボーナス Rested（夜空に淡い三日月）
+    "nIInn",
+    "IInnn",
+    "IInnn",
+    "IInnn",
+    "nIInn",
+  },
+  {  // 睡眠のボーナス Refreshed（夜空に金色の三日月と星）
+    "nYYnW",
+    "YYnnn",
+    "YYnnn",
+    "YYnnn",
+    "nYYnn",
   },
 };
 

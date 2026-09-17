@@ -17,12 +17,12 @@ static uint16_t get_num_rows(MenuLayer *menu, uint16_t section, void *data) {
 }
 
 static int16_t get_header_height(MenuLayer *menu, uint16_t section, void *data) {
-  return game_rested_steps() > 0 ? MENU_HEADER_H : 0;
+  return game_saved_steps() > 0 ? MENU_HEADER_H : 0;
 }
 
 static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *data) {
   static char buf[32];
-  snprintf(buf, sizeof(buf), "RESTED %ld STEPS", (long)game_rested_steps());
+  snprintf(buf, sizeof(buf), "SAVED %ld STEPS", (long)game_saved_steps());
   gfx_draw_header(ctx, cell, buf);
 }
 

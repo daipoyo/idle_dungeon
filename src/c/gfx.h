@@ -111,7 +111,7 @@ void gfx_draw_header(GContext *ctx, const Layer *cell, const char *text);
 // 小物
 void gfx_draw_coin(GContext *ctx, int x, int y);         // 左上座標。5ドット四方
 // 文字と同じ高さ（5ドット）の小さなアイコン
-typedef enum { MINI_POTION, MINI_PORTAL, MINI_IDENTIFY } MiniIcon;
+typedef enum { MINI_POTION, MINI_PORTAL, MINI_IDENTIFY, MINI_MOON_RESTED, MINI_MOON_REFRESHED } MiniIcon;
 void gfx_draw_mini_icon(GContext *ctx, MiniIcon icon, int x, int y);
 // 「アイコン + 数」を描いて、次に描く x を返す
 int gfx_draw_mini_count(GContext *ctx, MiniIcon icon, int count, int x, int y, GColor color);

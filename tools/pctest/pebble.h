@@ -17,13 +17,21 @@
 
 #define PBL_HEALTH 1
 
-typedef enum { HealthMetricStepCount } HealthMetric;
+typedef enum { HealthMetricStepCount, HealthMetricSleepSeconds } HealthMetric;
+typedef enum { HealthActivitySleep = 1 } HealthActivity;
+typedef uint32_t HealthActivityMask;
+typedef enum { HealthIterationDirectionPast, HealthIterationDirectionFuture } HealthIterationDirection;
+typedef bool (*HealthActivityIteratorCB)(HealthActivity activity, time_t time_start, time_t time_end,
+                                         void *context);
 typedef uint32_t HealthServiceAccessibilityMask;
 #define HealthServiceAccessibilityMaskAvailable 1
 
 // テストから歩数を決める
 extern int32_t pctest_steps_today;
 extern int32_t pctest_day_total;
+// 睡眠: 今日の合計と、眠りの記録1件（start == end なら記録なし）
+extern int32_t pctest_sleep_today;
+extern time_t pctest_sleep_start, pctest_sleep_end;
 
 static inline HealthServiceAccessibilityMask health_service_metric_accessible(HealthMetric m,
                                                                               time_t start,
@@ -32,8 +40,15 @@ static inline HealthServiceAccessibilityMask health_service_metric_accessible(He
   return HealthServiceAccessibilityMaskAvailable;
 }
 static inline int32_t health_service_sum_today(HealthMetric m) {
-  (void)m;
-  return pctest_steps_today;
+  return m == HealthMetricSleepSeconds ? pctest_sleep_today : pctest_steps_today;
+}
+static inline void health_service_activities_iterate(HealthActivityMask mask, time_t start, time_t end,
+                                                     HealthIterationDirection dir,
+                                                     HealthActivityIteratorCB cb, void *context) {
+  (void)mask; (void)dir;
+  if (pctest_sleep_end > pctest_sleep_start && pctest_sleep_end > start && pctest_sleep_start < end) {
+    cb(HealthActivitySleep, pctest_sleep_start, pctest_sleep_end, context);
+  }
 }
 static inline int32_t health_service_sum(HealthMetric m, time_t start, time_t end) {
   (void)m; (void)start; (void)end;

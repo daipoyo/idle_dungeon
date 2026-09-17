@@ -12,6 +12,7 @@
 #define BG_DUNGEON4_FILL 0xCB
 #define BG_DUNGEON5_FILL 0xC0
 #define BG_TOWN_FILL 0xDB
+#define BG_TOWN_NIGHT_FILL 0xC1
 
 #define BG_TILE_W 128
 #define BG_FAR_H 128

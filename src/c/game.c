@@ -88,9 +88,10 @@ typedef struct {
   uint16_t runs;
   uint16_t deaths;
   uint8_t remind_hour;      // 出発の知らせ（0 = しない）
-  uint8_t pad8;
-  uint16_t pad16;
-  int32_t rested;           // 町にいる間に貯めた歩数
+  uint8_t sleep_tier;       // 今日の睡眠のボーナス（SleepTier）
+  uint16_t sleep_min;       // 昨夜眠った分数
+  int32_t saved_steps;      // 町にいる間に貯めた歩数
+  uint32_t sleep_day;       // sleep_tier を決めた日の 0時
 } Hero;
 
 typedef struct {
@@ -174,6 +175,8 @@ static bool log_type_important(uint8_t type) {
     case LOG_DROP_GONE:
     case LOG_AGENT:
     case LOG_SUMMARY:
+    case LOG_SLEEP:
+    case LOG_SAVED_STEPS:
       return true;
     default:
       return false;
@@ -243,6 +246,7 @@ LogStyle game_log_style(int i) {
     case LOG_RECOVER:
     case LOG_AGENT:
     case LOG_IDENTIFY:
+    case LOG_SLEEP:
       return LOG_STYLE_GREAT;
     case LOG_ITEM:
       return e->a >= RARITY_RARE ? LOG_STYLE_GREAT : LOG_STYLE_DUNGEON;
@@ -250,7 +254,7 @@ LogStyle game_log_style(int i) {
       return e->c ? LOG_STYLE_GREAT : LOG_STYLE_DANGER;
     case LOG_WELCOME:
     case LOG_TOWN:
-    case LOG_RESTED:
+    case LOG_SAVED_STEPS:
       return LOG_STYLE_TOWN;
     default:
       return LOG_STYLE_DUNGEON;
@@ -319,7 +323,12 @@ void game_log_text(int i, char *buf, size_t size) {
     case LOG_WALK_BACK: snprintf(buf, size, "Turned back for town."); break;
     case LOG_BOTTOM: snprintf(buf, size, "Deepest floor cleared! Heading back."); break;
     case LOG_TOWN: snprintf(buf, size, "Made it back to town."); break;
-    case LOG_RESTED: snprintf(buf, size, "Rested steps: %d used.", e->b); break;
+    case LOG_SAVED_STEPS: snprintf(buf, size, "Saved steps: %d used.", e->b); break;
+    case LOG_SLEEP:
+      snprintf(buf, size, e->a >= SLEEP_REFRESHED ? "Slept %dh%02dm. Refreshed! XP/Gold +20%%"
+                                                  : "Slept %dh%02dm. Rested. XP/Gold +10%%",
+               e->b / 60, e->b % 60);
+      break;
     case LOG_DEATH:
       snprintf(buf, size, "Died in %s F%d. Gear left behind.", g_dungeons[e->a % DUNGEON_COUNT].name, e->b);
       break;
@@ -573,9 +582,58 @@ int game_item_price(const Item *it) {
   return price + price * it->plus / 10;
 }
 
+// ============================================================
+// 睡眠のボーナス
+//   昨夜 6時間以上眠れば Rested（経験値・ゴールド +10%）、
+//   7時間以上なら Refreshed（経験値・ゴールド +20%、マジック発見 +10）。その日の 0時〜24時だけ効く
+// ============================================================
+SleepTier game_sleep_tier(void) {
+  if (s_hero.sleep_day != (uint32_t)steps_day_start(time(NULL))) return SLEEP_NONE;
+  return s_hero.sleep_tier <= SLEEP_REFRESHED ? (SleepTier)s_hero.sleep_tier : SLEEP_NONE;
+}
+
+int game_sleep_minutes(void) { return game_sleep_tier() ? s_hero.sleep_min : 0; }
+
+static int sleep_bonus(Effect fx) {
+  SleepTier tier = game_sleep_tier();
+  switch (fx) {
+    case FX_XP:
+    case FX_GOLD: return tier == SLEEP_REFRESHED ? 20 : (tier == SLEEP_RESTED ? 10 : 0);
+    case FX_MAGIC: return tier == SLEEP_REFRESHED ? 10 : 0;
+    default: return 0;
+  }
+}
+
+// 睡眠の記録を見てボーナスを決める。朝まだ眠っている間に見ても、後で眠った時間が伸びれば上げ直す
+// ボーナスが上がったら true（ログは歩数を反映した後に出すので、ここでは出さない）
+static bool check_sleep(void) {
+  static time_t s_checked_at;   // 時計の記録を見に行くのは数分に1回まで
+  time_t now = time(NULL);
+  uint32_t today = (uint32_t)steps_day_start(now);
+  if (s_hero.sleep_day != today) {
+    s_hero.sleep_day = today;
+    s_hero.sleep_tier = SLEEP_NONE;
+    s_hero.sleep_min = 0;
+    s_checked_at = 0;
+    s_dirty = true;
+  }
+  if (s_hero.sleep_tier >= SLEEP_REFRESHED) return false;
+  if (s_checked_at && now - s_checked_at < 5 * SECONDS_PER_MINUTE) return false;
+  s_checked_at = now;
+  int32_t sec = steps_last_night_sleep();
+  SleepTier tier = sec >= SLEEP_REFRESHED_SEC ? SLEEP_REFRESHED : (sec >= SLEEP_RESTED_SEC ? SLEEP_RESTED : SLEEP_NONE);
+  if (tier > s_hero.sleep_tier) {
+    s_hero.sleep_tier = (uint8_t)tier;
+    s_hero.sleep_min = (uint16_t)(sec / 60);
+    s_dirty = true;
+    return true;
+  }
+  return false;
+}
+
 // レア度を決める（深いダンジョンほど、マジック発見が高いほど良い物が出る）
 static uint8_t roll_rarity(int dungeon) {
-  uint32_t r = (uint32_t)rnd(1000) * 100 / (uint32_t)(100 + game_effect_total(FX_MAGIC));
+  uint32_t r = (uint32_t)rnd(1000) * 100 / (uint32_t)(100 + game_effect_total(FX_MAGIC) + sleep_bonus(FX_MAGIC));
   if (r < 4 + (uint32_t)dungeon / 2) return RARITY_UNIQUE;
   if (r < 16 + (uint32_t)dungeon) return RARITY_SET;
   if (r < 90 + (uint32_t)dungeon * 5) return RARITY_RARE;
@@ -1048,7 +1106,7 @@ static void add_gold(int g) {
 
 // ダンジョンで見つけたお金（ゴールド発見の効果がつく）
 static int loot_gold(int g) {
-  g = g * (100 + game_effect_total(FX_GOLD)) / 100;
+  g = g * (100 + game_effect_total(FX_GOLD) + sleep_bonus(FX_GOLD)) / 100;
   add_gold(g);
   return g;
 }
@@ -1085,7 +1143,7 @@ static bool battle(int monster, int mlvl, bool boss) {
     xp *= 3;
     gold *= 4;
   }
-  xp = xp * (100 + game_effect_total(FX_XP)) / 100;
+  xp = xp * (100 + game_effect_total(FX_XP) + sleep_bonus(FX_XP)) / 100;
   gold = loot_gold(gold);
   // 吸収: 勝つと最大HPの一部を回復
   int leech = game_effect_total(FX_LEECH);
@@ -1285,14 +1343,14 @@ static int32_t walk_steps(int32_t raw) {
 }
 
 // 町にいる間の歩数を貯める（上限あり）
-static void add_rested(int32_t n) {
+static void add_saved_steps(int32_t n) {
   if (n <= 0) return;
-  int32_t total = s_hero.rested + n;
-  s_hero.rested = total < RESTED_MAX ? total : RESTED_MAX;
+  int32_t total = s_hero.saved_steps + n;
+  s_hero.saved_steps = total < SAVED_STEPS_MAX ? total : SAVED_STEPS_MAX;
   s_dirty = true;
 }
 
-int32_t game_rested_steps(void) { return s_hero.rested; }
+int32_t game_saved_steps(void) { return s_hero.saved_steps; }
 
 bool game_depart(int idx) {
   if (idx < 0 || idx >= DUNGEON_COUNT || s_run.mode != RUN_NONE) return false;
@@ -1311,12 +1369,12 @@ bool game_depart(int idx) {
   s_warned_no_steps = false;
   s_low_hp_alerted = false;
   log_push(LOG_DEPART, idx, 0, 0, 0);
-  if (s_hero.rested > 0) {
-    int32_t use = s_hero.rested;
-    s_hero.rested = 0;
-    log_push(LOG_RESTED, 0, use, 0, 0);
+  if (s_hero.saved_steps > 0) {
+    int32_t use = s_hero.saved_steps;
+    s_hero.saved_steps = 0;
+    log_push(LOG_SAVED_STEPS, 0, use, 0, 0);
     int32_t left = walk_steps(use);
-    if (s_run.mode == RUN_NONE) add_rested(left);   // 使い切る前に帰ってきたら、残りはまた貯める
+    if (s_run.mode == RUN_NONE) add_saved_steps(left);   // 使い切る前に帰ってきたら、残りはまた貯める
   }
   game_save();
   return true;
@@ -1600,6 +1658,7 @@ static void check_drop_expire(void) {
 // ============================================================
 bool game_update(void) {
   s_alert = false;
+  bool slept = check_sleep();   // ボーナスは、これから反映する歩数にも効く
   check_drop_expire();
   if (s_run.mode != RUN_NONE) {
     if (!steps_available()) {
@@ -1610,16 +1669,18 @@ bool game_update(void) {
     } else {
       int32_t left = walk_steps(steps_since(&s_run.snap));
       // 途中で町に着いた（または倒れた）なら、残りの歩数は次の出発のために貯める
-      if (s_run.mode == RUN_NONE) add_rested(left);
+      if (s_run.mode == RUN_NONE) add_saved_steps(left);
     }
   } else if (steps_available()) {
     // 町にいる間の歩数も無駄にしない（前回の記録は探索の最後の記録がそのまま続く）
     int32_t n = steps_since(&s_run.snap);
     if (n > 0) {
-      add_rested(n);
+      add_saved_steps(n);
       s_dirty = true;
     }
   }
+  // まとめのログに埋もれないよう、睡眠のログは最後に出す
+  if (slept) log_push(LOG_SLEEP, s_hero.sleep_tier, s_hero.sleep_min, 0, 0);
   bool changed = s_dirty;
   if (s_dirty) game_save();
   if (s_alert && s_hero.vibrate) vibes_double_pulse();

@@ -37,6 +37,7 @@
         { "type": "bitmap", "name": "IMG_BG_DUNGEON4", "file": "images/bg_dungeon4.png" },
         { "type": "bitmap", "name": "IMG_BG_DUNGEON5", "file": "images/bg_dungeon5.png" },
         { "type": "bitmap", "name": "IMG_BG_TOWN", "file": "images/bg_town.png" },
+        { "type": "bitmap", "name": "IMG_BG_TOWN_NIGHT", "file": "images/bg_town_night.png" },
         { "type": "bitmap", "name": "IMG_KEEPER_FACE", "file": "images/keeper_face.png" },
         { "type": "bitmap", "name": "IMG_FACE_SMITH", "file": "images/face_smith.png" },
         { "type": "bitmap", "name": "IMG_FACE_APPRAISER", "file": "images/face_appraiser.png" },
