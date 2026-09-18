@@ -97,8 +97,11 @@ typedef struct {
   GColor right_color;
   bool tint_sub;       // サブテキストを sub_color で描く（warn_sub より優先）
   GColor sub_color;
+  Compare compare;     // 今の装備とくらべた印（右端に三角。CMP_NONE でなし）
 } RowSpec;
 void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row);
+// 今の装備とくらべた印（5ドット四方）
+void gfx_draw_compare(GContext *ctx, Compare cmp, int x, int y);
 // アイテム1個分の行（アイコン・レア度の色の名前・性能。未鑑定なら警告色）を row に詰める。
 // name / sub は呼び出し側のバッファ（描き終わるまで生きていること）
 void gfx_item_row(RowSpec *row, const Item *it, char *name, size_t name_size, char *sub,

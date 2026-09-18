@@ -628,6 +628,50 @@ static void test_sleep(void) {
   pctest_sleep_today = 0;
 }
 
+static void test_compare(void) {
+  puts("Comparing gear");
+  reset_game(53);
+  memset(s_equip, 0, sizeof(s_equip));
+  memset(s_bag, 0, sizeof(s_bag));
+
+  Item weak = make_item(SH_SHORT_SWORD, 1);
+  Item strong = make_item(SH_SHORT_SWORD, 30);
+  const Item *now = NULL;
+  ItemStats diff;
+
+  bag_add(&strong);
+  check(game_item_compare(&s_bag[0], &now, &diff) == CMP_BETTER && now == NULL,
+        "with an empty slot, anything is an improvement");
+  check(diff.atk == game_item_stats(&s_bag[0]).atk, "the whole stat counts when the slot is empty");
+
+  s_equip[SLOT_WEAPON] = strong;
+  s_bag[0] = weak;
+  check(game_item_compare(&s_bag[0], &now, &diff) == CMP_WORSE && now == &s_equip[SLOT_WEAPON],
+        "a weaker weapon is marked worse");
+  check(diff.atk < 0, "the difference is negative");
+  printf("  Lv1 vs Lv30 short sword: ATK %d\n", diff.atk);
+
+  s_bag[0] = strong;
+  check(game_item_compare(&s_bag[0], NULL, NULL) == CMP_EVEN, "the same gear compares as even");
+
+  // 今つけている物そのものはくらべない
+  check(game_item_compare(&s_equip[SLOT_WEAPON], NULL, NULL) == CMP_NONE, "equipped gear has nothing to compare");
+
+  // 未鑑定の物はくらべられない
+  Item unident = make_drop_item(20, 4);
+  unident.rarity = RARITY_RARE;
+  unident.flags = 0;
+  check(game_item_compare(&unident, NULL, NULL) == CMP_NONE, "unidentified gear cannot be compared");
+
+  // 指輪は空いている方と入れ替わる
+  Item ring = make_item(SH_MOON_RING, 10);
+  s_equip[SLOT_RING1] = make_item(SH_MOON_RING, 40);
+  memset(&s_equip[SLOT_RING2], 0, sizeof(Item));
+  s_bag[0] = ring;
+  check(game_item_compare(&s_bag[0], &now, NULL) == CMP_BETTER && now == NULL,
+        "a second ring goes in the empty finger, not against the good one");
+}
+
 // 実際に歩いて遊んだときの様子（バランス確認）
 //   margin: ダンジョン選びの強気さ（敵のレベルが「勇者のレベル + margin」までなら入る）
 static void play_days(int days, int margin, bool verbose) {
@@ -687,6 +731,7 @@ int main(void) {
   test_codex();
   test_saved_steps();
   test_sleep();
+  test_compare();
   test_play_balance();
   printf("\n%s (%d failure%s)\n", s_failures ? "FAILED" : "ALL PASSED", s_failures,
          s_failures == 1 ? "" : "s");

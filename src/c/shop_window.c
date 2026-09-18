@@ -110,6 +110,7 @@ static void draw_buy_row(GContext *ctx, const Layer *cell, int r) {
     gfx_item_stat_text(&it, stats, sizeof(stats));
     int cost = game_shop_gear_cost(i);
     row.item = &it;
+    row.compare = game_item_compare(&it, NULL, NULL);
     game_item_short_name(&it, name, sizeof(name));
     row.title = name;
     snprintf(sub, sizeof(sub), "%dG %s", cost, stats);

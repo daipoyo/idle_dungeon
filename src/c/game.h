@@ -201,6 +201,10 @@ extern const int g_suffix_count;
 
 // 未鑑定なら基本性能だけ、鑑定済みなら接辞と強化も含めた性能
 ItemStats game_item_stats(const Item *it);
+// 今つけている物とくらべる（持ち物・お店・保管庫の品を見るとき）
+//   now にはその部位に今つけている物（空なら NULL）、diff には付け替えたときの増減が入る
+typedef enum { CMP_NONE, CMP_BETTER, CMP_WORSE, CMP_EVEN } Compare;
+Compare game_item_compare(const Item *it, const Item **now, ItemStats *diff);
 const ShapeDef *game_item_shape(const Item *it);   // 空なら NULL
 int game_item_tier(const Item *it);                // 素材の段階 0〜5
 int game_item_price(const Item *it);               // 売値

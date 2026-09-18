@@ -460,6 +460,36 @@ void gfx_setup_menu(MenuLayer *menu, Window *window) {
   window_set_background_color(window, THEME_BG);
 }
 
+// 今の装備とくらべた印。良くなるなら緑の上向き、悪くなるなら赤の下向き、同じなら灰色の横線
+static const char *const CMP_MARKS[3][5] = {
+  {
+    "..L..",
+    ".LLL.",
+    "LLLLL",
+    ".....",
+    ".....",
+  },
+  {
+    ".....",
+    ".....",
+    "RRRRR",
+    ".RRR.",
+    "..R..",
+  },
+  {
+    ".....",
+    ".ggg.",
+    ".....",
+    ".ggg.",
+    ".....",
+  },
+};
+
+void gfx_draw_compare(GContext *ctx, Compare cmp, int x, int y) {
+  if (cmp == CMP_NONE) return;
+  gfx_draw_charmap(ctx, CMP_MARKS[cmp - 1], 5, 5, x, y, PX, false, NULL);
+}
+
 void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   GRect b = layer_get_bounds(cell);
   bool hi = menu_cell_layer_is_highlighted(cell);
@@ -504,6 +534,10 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   GColor title_fg = (row->tint_title && !row->dim && !hi) ? row->title_color : fg;
 
   int right_w = 0;
+  if (row->compare != CMP_NONE && !row->right) {
+    right_w = 7 * PX;
+    gfx_draw_compare(ctx, row->compare, right_edge - right_w, ty);
+  }
   if (row->right) {
     right_w = gfx_text_width(row->right) + 2 * PX;
     gfx_text(ctx, row->right, GRect(right_edge - right_w, ty, right_w, LINE_H),

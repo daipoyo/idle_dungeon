@@ -803,14 +803,43 @@ static void bag_remove(int i) {
 
 bool game_can_change_gear(void) { return s_run.mode == RUN_NONE; }
 
+// その品を身に着けるとき、どの部位の物と入れ替わるか（指輪は空いている方へ）
+static int equip_target_slot(const ShapeDef *sh) {
+  int slot = sh->slot;
+  if (slot == SLOT_RING1 && s_equip[SLOT_RING1].base && !s_equip[SLOT_RING2].base) slot = SLOT_RING2;
+  return slot;
+}
+
+// ざっくりした強さ（ATK と DEF は HP より重く見る）
+static int stat_score(ItemStats s) { return s.atk * 3 + s.def * 3 + s.hp; }
+
+Compare game_item_compare(const Item *it, const Item **now, ItemStats *diff) {
+  if (now) *now = NULL;
+  if (diff) memset(diff, 0, sizeof(*diff));
+  const ShapeDef *sh = game_item_shape(it);
+  if (!sh || !game_item_identified(it)) return CMP_NONE;
+  const Item *cur = game_equipped(equip_target_slot(sh));
+  if (cur == it) return CMP_NONE;   // 今つけている物そのもの
+  ItemStats a = game_item_stats(it);
+  ItemStats b = { 0, 0, 0 };
+  if (cur) b = game_item_stats(cur);
+  if (now) *now = cur;
+  if (diff) {
+    diff->atk = (int16_t)(a.atk - b.atk);
+    diff->def = (int16_t)(a.def - b.def);
+    diff->hp = (int16_t)(a.hp - b.hp);
+  }
+  int d = stat_score(a) - stat_score(b);
+  return d > 0 ? CMP_BETTER : (d < 0 ? CMP_WORSE : CMP_EVEN);
+}
+
 bool game_equip_from_bag(int bag_index) {
   if (!game_can_change_gear()) return false;
   const Item *it = game_bag(bag_index);
   const ShapeDef *sh = game_item_shape(it);
   if (!sh) return false;
   if (!game_item_identified(it)) return false;   // 未鑑定の物は身に着けられない
-  int slot = sh->slot;
-  if (slot == SLOT_RING1 && s_equip[SLOT_RING1].base && !s_equip[SLOT_RING2].base) slot = SLOT_RING2;
+  int slot = equip_target_slot(sh);
   Item picked = *it;
   Item old = s_equip[slot];
   s_equip[slot] = picked;

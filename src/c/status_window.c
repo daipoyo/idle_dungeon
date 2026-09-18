@@ -179,6 +179,8 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     snprintf(sub, sizeof(sub), "Unidentified");
     row.warn_sub = true;
   }
+  // 持ち物は、今つけている物より良くなるかどうかを右端の三角で示す
+  if (index->section == 2) row.compare = game_item_compare(it, NULL, NULL);
   gfx_draw_row(ctx, cell, &row);
 }
 

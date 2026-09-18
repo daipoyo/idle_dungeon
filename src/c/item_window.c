@@ -77,6 +77,35 @@ static void pen_gap(Pen *p) {
   p->y += 2 * PX;
 }
 
+// 今つけている物とのくらべ。「ATK 12 > 15」のように並べ、増えるなら緑、減るなら赤
+static void pen_compare(Pen *p, const Item *it) {
+  if (s_place == ITEM_AT_EQUIP) return;   // 今つけている物そのもの
+  const Item *now = NULL;
+  ItemStats diff;
+  Compare cmp = game_item_compare(it, &now, &diff);
+  if (cmp == CMP_NONE) return;
+  static char buf[48];
+  static char name[40];
+  pen_gap(p);
+  if (now) {
+    game_item_short_name(now, name, sizeof(name));
+    snprintf(buf, sizeof(buf), "Now wearing %s", name);
+  } else {
+    snprintf(buf, sizeof(buf), "That slot is empty");
+  }
+  pen_text(p, buf, THEME_SUB);
+
+  ItemStats mine = game_item_stats(it);
+  static const char *const STAT[] = { "ATK", "DEF", "HP" };
+  int16_t of_mine[] = { mine.atk, mine.def, mine.hp };
+  int16_t of_diff[] = { diff.atk, diff.def, diff.hp };
+  for (int i = 0; i < 3; i++) {
+    if (!of_mine[i] && !of_diff[i]) continue;
+    snprintf(buf, sizeof(buf), "%s %d > %d", STAT[i], of_mine[i] - of_diff[i], of_mine[i]);
+    pen_text(p, buf, of_diff[i] > 0 ? GColorBrightGreen : (of_diff[i] < 0 ? GColorMelon : THEME_FG));
+  }
+}
+
 static void draw_content(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
   const Item *it = current_item();
@@ -122,6 +151,7 @@ static void draw_content(Layer *layer, GContext *ctx) {
       snprintf(buf, sizeof(buf), "Upgraded +%d", it->plus);
       pen_text(&p, buf, THEME_FG);
     }
+    pen_compare(&p, it);
   }
 
   // 接辞
