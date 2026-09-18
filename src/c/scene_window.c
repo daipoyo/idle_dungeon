@@ -325,16 +325,17 @@ static void select_click(ClickRecognizerRef recognizer, void *context) {
   menu_window_push();
 }
 
+// ログは上が最新。DOWN で下（古い方）へ、UP で上（新しい方）へ戻る
 static void up_click(ClickRecognizerRef recognizer, void *context) {
-  if (s_scroll + 1 < game_log_count()) {
-    s_scroll++;
+  if (s_scroll > 0) {
+    s_scroll--;
     layer_mark_dirty(s_canvas);
   }
 }
 
 static void down_click(ClickRecognizerRef recognizer, void *context) {
-  if (s_scroll > 0) {
-    s_scroll--;
+  if (s_scroll + 1 < game_log_count()) {
+    s_scroll++;
     layer_mark_dirty(s_canvas);
   }
 }
