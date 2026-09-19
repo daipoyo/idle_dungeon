@@ -167,7 +167,10 @@ static void update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, GRect(0, 0, b.size.w, grid_top), 0, GCornerNone);
   int seen_total = game_codex_seen_count() - game_codex_found_count();
-  if (seen_total > 0) {
+  if (game_rumour_count() > 0) {
+    snprintf(buf, sizeof(buf), "CODEX %d/%d %d HUNT%s", game_codex_found_count(), game_codex_size(),
+             game_rumour_count(), game_rumour_count() > 1 ? "S" : "");
+  } else if (seen_total > 0) {
     snprintf(buf, sizeof(buf), "CODEX %d/%d +%d SEEN", game_codex_found_count(), game_codex_size(),
              seen_total);
   } else {
@@ -305,6 +308,14 @@ static void window_load(Window *window) {
   s_layer = layer_create(b);
   layer_set_update_proc(s_layer, update_proc);
   layer_add_child(root, s_layer);
+  // 狙っている品があれば、そこから見せる（区画がばらけていても見つけられるように）
+  for (int i = 0; i < RUMOUR_SLOTS; i++) {
+    int entry = game_rumour_at(i);
+    if (entry >= 0) {
+      s_cursor = entry;
+      break;
+    }
+  }
   keep_cursor_visible();
 }
 

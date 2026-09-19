@@ -877,8 +877,18 @@ static void test_tavern(void) {
   check(game_gold() == gold - game_tavern_price(offers[0]), "and it costs what it said");
   check(game_buy_tavern(0) == RUMOUR_NONE, "buying the same one twice does nothing");
 
+  // 2つ聞いたら、2つとも図鑑に姿が出る
+  check(game_buy_tavern(1) == RUMOUR_OK, "a second rumour can be bought");
+  for (int i = 0; i < 2; i++) {
+    char name[40];
+    game_codex_name(offers[i], name, sizeof(name));
+    printf("  after buying: %-22s state %d\n", name, (int)game_codex_state(offers[i]));
+    check(game_codex_state(offers[i]) == CODEX_SEEN, "both rumours show in the codex");
+  }
+  check(game_rumour_count() == 2, "and both take a slot");
+
   s_hero.gold = 0;
-  check(game_buy_tavern(1) == RUMOUR_NO_GOLD, "no coin, no story");
+  check(game_buy_tavern(2) == RUMOUR_NO_GOLD, "no coin, no story");
 }
 
 // 実際に歩いて遊んだときの様子（バランス確認）
