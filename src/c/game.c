@@ -20,6 +20,8 @@
 #define KEY_STASH_B 109   // 保管庫の後半 24個
 #define KEY_CODEX 110     // 図鑑の発見ビット（128バイト）
 #define KEY_CODEX_SEEN 111   // 噂などで見ただけのビット（128バイト）
+#define KEY_RUMOUR 112       // 狙っている品（図鑑の番号）
+#define KEY_BOSS_MISS 113    // ボス専用ユニークの空振り回数
 #define SAVE_VERSION 2   // 2: 図鑑1000種の番号に変更（それ以前のセーブはリセット）
 
 // ============================================================
@@ -140,6 +142,8 @@ static bool s_alert;            // 振動で知らせたい出来事があった
 static Item s_stash[STASH_SIZE];
 static uint8_t s_codex[CODEX_BYTES];        // 自分で手に入れた
 static uint8_t s_codex_seen[CODEX_BYTES];   // 噂で知った・取り逃した
+static uint16_t s_rumours[RUMOUR_SLOTS];    // 狙っている品（図鑑の番号 + 1。0 は空き）
+static uint8_t s_boss_miss[DUNGEON_COUNT];  // ボスを倒しても専用ユニークが出なかった回数
 static bool s_warned_no_steps;
 static bool s_low_hp_alerted;   // 帰り道で「HPが少ない」と知らせたか（保存しない）
 
@@ -701,8 +705,46 @@ static Item make_special_item(int special, int ilvl) {
   return it;
 }
 
+// 噂の効き目: 狙っている品がこの場所で出るなら、この確率でその品にする
+#define RUMOUR_BASE_PCT 30      // 基本アイテム
+#define RUMOUR_SPECIAL_PCT 8    // 固有・セット装備
+#define RUMOUR_BOSS_PCT 50      // ボス専用ユニーク（ふだんは BOSS_UNIQUE_CHANCE）
+#define BOSS_PITY 5             // これだけ空振りしたら次は必ず出す
+
+// ここで出せる噂の品を1つ選ぶ（なければ -1）。基本アイテムは素材の段階が合うことが条件
+static int rumour_here(int ilvl, int dungeon) {
+  int tier = item_tier_for_level(ilvl);
+  int hits[RUMOUR_SLOTS];
+  int n = 0;
+  for (int i = 0; i < RUMOUR_SLOTS; i++) {
+    int entry = game_rumour_at(i);
+    if (entry < 0) continue;
+    if (entry < BASE_COUNT) {
+      if (entry % TIER_COUNT == tier) hits[n++] = entry;
+    } else {
+      const SpecialDef *d = &g_specials[entry - BASE_COUNT];
+      if (d->boss) continue;   // ボス専用は最深部でしか出ない
+      if (d->dungeon == dungeon || d->dungeon >= DUNGEON_COUNT) hits[n++] = entry;
+    }
+  }
+  return n ? hits[rnd(n)] : -1;
+}
+
 // ダンジョンで拾ったアイテムを作る（レア度つき）
 static Item make_drop_item(int ilvl, int dungeon) {
+  // 狙っている品が出る場所なら、ときどきその品が出る
+  int wanted = rumour_here(ilvl, dungeon);
+  if (wanted >= 0) {
+    bool special = wanted >= BASE_COUNT;
+    if (rnd(100) < (special ? RUMOUR_SPECIAL_PCT : RUMOUR_BASE_PCT)) {
+      if (special) return make_special_item(wanted - BASE_COUNT, ilvl);
+      Item it = make_item(wanted / TIER_COUNT, ilvl);
+      it.base = (uint16_t)(wanted + 1);
+      it.rarity = roll_rarity(dungeon);
+      if (it.rarity >= RARITY_RARE) it.flags &= (uint8_t)~ITEM_FLAG_IDENTIFIED;
+      return it;
+    }
+  }
   uint8_t rarity = roll_rarity(dungeon);
   if (rarity == RARITY_SET || rarity == RARITY_UNIQUE) {
     int special = pick_special(dungeon, rarity == RARITY_SET);
@@ -767,6 +809,7 @@ void game_codex_mark_seen(int i) {
 static void codex_set(int i) {
   if (i < 0 || i >= game_codex_size() || game_codex_found(i)) return;
   s_codex[i / 8] |= (uint8_t)(1 << (i % 8));
+  game_drop_rumour(i);   // 狙っていた品なら、枠が空く
   s_dirty = true;
 }
 
@@ -820,6 +863,57 @@ void game_codex_source(int i, char *buf, size_t size) {
   if (!first) snprintf(buf, size, "Unknown");
   else if (count == 1) snprintf(buf, size, "%s", first);
   else snprintf(buf, size, "%s +%d", first, count - 1);
+}
+
+// ---- 噂 ----
+int game_rumour_count(void) {
+  int n = 0;
+  for (int i = 0; i < RUMOUR_SLOTS; i++) n += s_rumours[i] ? 1 : 0;
+  return n;
+}
+
+int game_rumour_at(int slot) {
+  if (slot < 0 || slot >= RUMOUR_SLOTS || !s_rumours[slot]) return -1;
+  return s_rumours[slot] - 1;
+}
+
+bool game_rumour_has(int entry) {
+  if (entry < 0) return false;
+  for (int i = 0; i < RUMOUR_SLOTS; i++) {
+    if (s_rumours[i] == entry + 1) return true;
+  }
+  return false;
+}
+
+// 狙いを定める料金。素材の段階が高いほど、固有・セット装備はさらに高い
+int game_rumour_price(int entry) {
+  if (entry < 0 || entry >= game_codex_size() || game_codex_found(entry)) return 0;
+  if (entry >= BASE_COUNT) return 5000;
+  return 500 + 300 * (entry % TIER_COUNT);
+}
+
+RumourResult game_buy_rumour(int entry) {
+  int price = game_rumour_price(entry);
+  if (!price || game_rumour_has(entry)) return RUMOUR_NONE;
+  if (game_rumour_count() >= RUMOUR_SLOTS) return RUMOUR_FULL;
+  if (s_hero.gold < price) return RUMOUR_NO_GOLD;
+  for (int i = 0; i < RUMOUR_SLOTS; i++) {
+    if (s_rumours[i]) continue;
+    s_hero.gold -= price;
+    s_rumours[i] = (uint16_t)(entry + 1);
+    game_codex_mark_seen(entry);   // 噂を聞いた時点で、姿は分かる
+    game_save();
+    return RUMOUR_OK;
+  }
+  return RUMOUR_FULL;
+}
+
+void game_drop_rumour(int entry) {
+  for (int i = 0; i < RUMOUR_SLOTS; i++) {
+    if (s_rumours[i] != entry + 1) continue;
+    s_rumours[i] = 0;
+    s_dirty = true;
+  }
 }
 
 void game_codex_name(int i, char *buf, size_t size) {
@@ -1159,7 +1253,23 @@ static void found_item(int ilvl) {
 #define BOSS_UNIQUE_CHANCE 15
 
 static void found_boss_loot(int dungeon, int ilvl) {
-  if (rnd(100) < BOSS_UNIQUE_CHANCE) {
+  // そのダンジョンのボス専用ユニークを狙っていれば出やすく、空振りが続けば必ず出す
+  int boss_entry = -1;
+  for (int i = 0; i < g_special_count; i++) {
+    if (g_specials[i].boss && g_specials[i].dungeon == dungeon) {
+      boss_entry = BASE_COUNT + i;
+      break;
+    }
+  }
+  int chance = BOSS_UNIQUE_CHANCE;
+  bool sure = false;
+  if (boss_entry >= 0 && !game_codex_found(boss_entry)) {
+    if (game_rumour_has(boss_entry)) chance = RUMOUR_BOSS_PCT;
+    if (s_boss_miss[dungeon] + 1 >= BOSS_PITY) sure = true;
+  }
+  if (sure || rnd(100) < chance) {
+    s_boss_miss[dungeon] = 0;
+    s_dirty = true;
     for (int i = 0; i < g_special_count; i++) {
       if (!g_specials[i].boss || g_specials[i].dungeon != dungeon) continue;
       Item it = make_special_item(i, ilvl);
@@ -1172,6 +1282,10 @@ static void found_boss_loot(int dungeon, int ilvl) {
       }
       return;
     }
+  }
+  if (boss_entry >= 0 && !game_codex_found(boss_entry) && s_boss_miss[dungeon] < 255) {
+    s_boss_miss[dungeon]++;
+    s_dirty = true;
   }
   found_item(ilvl);
 }
@@ -1778,6 +1892,8 @@ void game_save(void) {
   persist_write_data(KEY_STASH_B, &s_stash[STASH_SIZE / 2], sizeof(Item) * (STASH_SIZE / 2));
   persist_write_data(KEY_CODEX, s_codex, sizeof(s_codex));
   persist_write_data(KEY_CODEX_SEEN, s_codex_seen, sizeof(s_codex_seen));
+  persist_write_data(KEY_RUMOUR, s_rumours, sizeof(s_rumours));
+  persist_write_data(KEY_BOSS_MISS, s_boss_miss, sizeof(s_boss_miss));
   s_dirty = false;
 }
 
@@ -1794,6 +1910,8 @@ static void new_game(void) {
   memset(s_stash, 0, sizeof(s_stash));
   memset(s_codex, 0, sizeof(s_codex));
   memset(s_codex_seen, 0, sizeof(s_codex_seen));
+  memset(s_rumours, 0, sizeof(s_rumours));
+  memset(s_boss_miss, 0, sizeof(s_boss_miss));
   s_hero.version = SAVE_VERSION;
   s_hero.level = 1;
   s_hero.gold = 100;
@@ -1837,10 +1955,14 @@ void game_init(void) {
   memset(s_stash, 0, sizeof(s_stash));
   memset(s_codex, 0, sizeof(s_codex));
   memset(s_codex_seen, 0, sizeof(s_codex_seen));
+  memset(s_rumours, 0, sizeof(s_rumours));
+  memset(s_boss_miss, 0, sizeof(s_boss_miss));
   persist_read_data(KEY_STASH_A, s_stash, sizeof(Item) * (STASH_SIZE / 2));
   persist_read_data(KEY_STASH_B, &s_stash[STASH_SIZE / 2], sizeof(Item) * (STASH_SIZE / 2));
   bool had_codex = persist_read_data(KEY_CODEX, s_codex, sizeof(s_codex)) > 0;
   persist_read_data(KEY_CODEX_SEEN, s_codex_seen, sizeof(s_codex_seen));
+  persist_read_data(KEY_RUMOUR, s_rumours, sizeof(s_rumours));
+  persist_read_data(KEY_BOSS_MISS, s_boss_miss, sizeof(s_boss_miss));
   if (!had_codex) {
     // 図鑑ができる前のセーブ: 今持っている物から図鑑を作る
     for (int i = 0; i < EQUIP_SLOTS; i++) codex_mark(&s_equip[i]);

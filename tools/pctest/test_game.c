@@ -315,8 +315,13 @@ static void test_sets(void) {
   printf("  1000 steps: depth %d without Stride, %d with Stride +20%%\n", depth[0], depth[1]);
   check(depth[1] > depth[0], "Stride moves the hero further");
 
-  // ボスの固有装備
+  // ボスの固有装備。すでに持っている場合は 15% くらい
   reset_game(17);
+  int crown = -1;
+  for (int i = 0; i < g_special_count; i++) {
+    if (g_specials[i].boss && g_specials[i].dungeon == 0) crown = BASE_COUNT + i;
+  }
+  codex_set(crown);
   int boss_uniques = 0;
   for (int i = 0; i < 400; i++) {
     memset(s_bag, 0, sizeof(s_bag));
@@ -326,6 +331,25 @@ static void test_sets(void) {
   }
   printf("  Rat King dropped his crown %d times in 400 kills\n", boss_uniques);
   check(boss_uniques > 20 && boss_uniques < 110, "boss uniques drop about 15% of the time");
+
+  // まだ持っていない場合は、5回倒すうちに必ず出る（天井）
+  memset(s_codex, 0, sizeof(s_codex));
+  int worst = 0;
+  for (int round = 0; round < 50; round++) {
+    memset(s_codex, 0, sizeof(s_codex));
+    memset(s_boss_miss, 0, sizeof(s_boss_miss));
+    int kills = 0;
+    while (kills < 20) {
+      memset(s_bag, 0, sizeof(s_bag));
+      found_boss_loot(0, 5);
+      kills++;
+      int sp = game_item_special(&s_bag[0]);
+      if (sp >= 0 && g_specials[sp].boss) break;
+    }
+    if (kills > worst) worst = kills;
+  }
+  printf("  at worst it took %d kills to see the crown\n", worst);
+  check(worst <= BOSS_PITY, "a boss unique the hero lacks turns up within the pity count");
 
   // 普通のドロップでボス専用の物は出ない。ホームのダンジョンの物が出やすい
   int home = 0, total = 0, boss_only = 0;
@@ -745,6 +769,76 @@ static void test_codex_states(void) {
   }
 }
 
+static void test_rumours(void) {
+  puts("Rumours (hunting a specific item)");
+  reset_game(71);
+  memset(s_rumours, 0, sizeof(s_rumours));
+  s_hero.gold = 100000;
+
+  int entry = SH_CLAYMORE * TIER_COUNT + 2;   // Steel Claymore
+  check(game_rumour_price(entry) == 500 + 300 * 2, "the price rises with the material tier");
+  check(game_buy_rumour(entry) == RUMOUR_OK, "a rumour can be bought");
+  check(game_rumour_has(entry) && game_rumour_count() == 1, "it takes a slot");
+  check(game_codex_state(entry) == CODEX_SEEN, "hearing about it reveals its look");
+  check(game_buy_rumour(entry) == RUMOUR_NONE, "the same item cannot be hunted twice");
+
+  int others[] = { SH_KATANA * TIER_COUNT + 2, SH_RAPIER * TIER_COUNT + 2, SH_SABER * TIER_COUNT + 2 };
+  check(game_buy_rumour(others[0]) == RUMOUR_OK && game_buy_rumour(others[1]) == RUMOUR_OK,
+        "three can be hunted at once");
+  check(game_buy_rumour(others[2]) == RUMOUR_FULL, "a fourth needs a free slot");
+  game_drop_rumour(others[1]);
+  check(game_rumour_count() == 2, "a hunt can be called off");
+
+  s_hero.gold = 10;
+  check(game_buy_rumour(others[2]) == RUMOUR_NO_GOLD, "it costs gold");
+  s_hero.gold = 100000;
+
+  // 狙った品は、その素材の段階が出るダンジョンで出やすい
+  memset(s_rumours, 0, sizeof(s_rumours));
+  game_buy_rumour(entry);
+  int here = 0, elsewhere = 0;
+  for (int i = 0; i < 2000; i++) {
+    Item it = make_drop_item(22, 4);       // 段階2が出る深さ
+    if (it.base == entry + 1) here++;
+    Item far = make_drop_item(45, 7);      // 段階5しか出ない深さ
+    if (far.base == entry + 1) elsewhere++;
+  }
+  printf("  Steel Claymore in 2000 drops: %d at the right depth, %d at the wrong one\n", here, elsewhere);
+  check(here > 400, "the hunted item turns up often where it can drop");
+  check(elsewhere == 0, "and never where its material cannot appear");
+
+  // 手に入れると枠が空く
+  Item found = make_item(SH_CLAYMORE, 22);
+  found.base = (uint16_t)(entry + 1);
+  memset(s_bag, 0, sizeof(s_bag));
+  bag_add(&found);
+  check(!game_rumour_has(entry) && game_codex_state(entry) == CODEX_FOUND,
+        "finding it ends the hunt and fills the codex");
+  check(game_rumour_price(entry) == 0, "an item already found cannot be hunted");
+
+  // 固有装備の噂は、そのダンジョンでだけ効く
+  memset(s_rumours, 0, sizeof(s_rumours));
+  int special = -1;
+  for (int i = 0; i < g_special_count; i++) {
+    if (!g_specials[i].set_id && !g_specials[i].boss && g_specials[i].dungeon == 3) special = i;
+  }
+  check(special >= 0, "the third dungeon has a unique of its own");
+  check(game_rumour_price(BASE_COUNT + special) == 5000, "uniques cost more to hunt");
+  game_buy_rumour(BASE_COUNT + special);
+  int hits = 0;
+  for (int i = 0; i < 2000; i++) {
+    Item it = make_drop_item(20, 3);
+    if (it.base == SPECIAL_BASE + special) hits++;
+  }
+  printf("  hunted unique in 2000 drops in its own dungeon: %d\n", hits);
+  check(hits > 80, "a hunted unique shows up far more often at home");
+
+  game_save();
+  memset(s_rumours, 0, sizeof(s_rumours));
+  game_init();
+  check(game_rumour_has(BASE_COUNT + special), "hunts survive a reload");
+}
+
 // 実際に歩いて遊んだときの様子（バランス確認）
 //   margin: ダンジョン選びの強気さ（敵のレベルが「勇者のレベル + margin」までなら入る）
 static void play_days(int days, int margin, bool verbose) {
@@ -803,6 +897,7 @@ int main(void) {
   test_blacksmith();
   test_codex();
   test_codex_states();
+  test_rumours();
   test_saved_steps();
   test_sleep();
   test_compare();

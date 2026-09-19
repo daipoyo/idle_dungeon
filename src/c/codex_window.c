@@ -26,6 +26,8 @@ static int s_cursor;   // 図鑑の番号
 static int s_scroll;   // マス目の表示位置（ピクセル）
 static int s_cols;
 static int s_cell;
+static bool s_confirm;          // 狙いを定める・取りやめる前の確認
+static const char *s_message;   // 下の欄に出す短い知らせ
 
 static void build_sections(void) {
   static const struct {
@@ -143,6 +145,13 @@ static void update_proc(Layer *layer, GContext *ctx) {
           gfx_draw_item_silhouette(ctx, &it, ix, iy, GColorDarkGray);
           gfx_dither_over(ctx, GRect(ix, iy, ITEM_ICON_SIZE, ITEM_ICON_SIZE), GColorBlack);
         }
+        // 狙っている品には、右上に金色の印
+        if (game_rumour_has(entry)) {
+          graphics_context_set_fill_color(ctx, THEME_GOLD);
+          graphics_fill_rect(ctx, GRect(cx + s_cell - 4 * PX, cy + PX, 3 * PX, 3 * PX), 0, GCornerNone);
+          graphics_context_set_fill_color(ctx, GColorBlack);
+          graphics_fill_rect(ctx, GRect(cx + s_cell - 3 * PX, cy + 2 * PX, PX, PX), 0, GCornerNone);
+        }
         if (entry == s_cursor) {
           graphics_context_set_stroke_color(ctx, THEME_HI);
           graphics_context_set_stroke_width(ctx, 1);
@@ -183,14 +192,27 @@ static void update_proc(Layer *layer, GContext *ctx) {
     gfx_text(ctx, buf, GRect(fx, grid_bot + 2 * PX, fw, LINE_H), align,
              state == CODEX_FOUND ? gfx_rarity_color(&it) : THEME_SUB);
   }
-  // 2行目: 番号と、手に入れた物なら案内、まだの物は見つかる場所
+  // 2行目: 手に入れた物なら案内、まだの物は見つかる場所と、狙いを定める案内
   static char place[24];
   game_codex_source(s_cursor, place, sizeof(place));
-  if (state == CODEX_FOUND) snprintf(buf, sizeof(buf), "No.%03d  SELECT: info", s_cursor + 1);
-  else if (state == CODEX_SEEN) snprintf(buf, sizeof(buf), "Seen: %s", place);
-  else snprintf(buf, sizeof(buf), "No.%03d  %s", s_cursor + 1, place);
-  gfx_text(ctx, buf, GRect(fx, grid_bot + 2 * PX + LINE_H, fw, LINE_H), align,
-           state == CODEX_SEEN ? THEME_HI : THEME_SUB);
+  GColor line2 = state == CODEX_SEEN ? THEME_HI : THEME_SUB;
+  if (s_message) {
+    snprintf(buf, sizeof(buf), "%s", s_message);
+    line2 = THEME_WARN;
+  } else if (game_rumour_has(s_cursor)) {
+    snprintf(buf, sizeof(buf), s_confirm ? "SELECT again: give up" : "HUNT %s", place);
+    line2 = s_confirm ? THEME_WARN : THEME_GOLD;
+  } else if (state == CODEX_FOUND) {
+    snprintf(buf, sizeof(buf), "No.%03d  SELECT: info", s_cursor + 1);
+  } else if (s_confirm) {
+    snprintf(buf, sizeof(buf), "SELECT again: %dG", game_rumour_price(s_cursor));
+    line2 = THEME_HI;
+  } else if (state == CODEX_SEEN) {
+    snprintf(buf, sizeof(buf), "Seen: %s", place);
+  } else {
+    snprintf(buf, sizeof(buf), "No.%03d  %s", s_cursor + 1, place);
+  }
+  gfx_text(ctx, buf, GRect(fx, grid_bot + 2 * PX + LINE_H, fw, LINE_H), align, line2);
 }
 
 // カーソルが見えるようにスクロールする（区切りの先頭の行では見出しも見せる）
@@ -206,6 +228,8 @@ static void keep_cursor_visible(void) {
 
 static void move_cursor(int delta) {
   int size = game_codex_size();
+  s_confirm = false;   // 別の品に移ったら確認は取り消す
+  s_message = NULL;
   s_cursor = (s_cursor + delta + size) % size;
   keep_cursor_visible();
   layer_mark_dirty(s_layer);
@@ -214,17 +238,44 @@ static void move_cursor(int delta) {
 static void up_click(ClickRecognizerRef rec, void *ctx) { move_cursor(-1); }
 static void down_click(ClickRecognizerRef rec, void *ctx) { move_cursor(1); }
 
+// SELECT: 手に入れた物は詳細、まだの物は「狙いを定める」（お金がかかるので2回押し）
 static void select_click(ClickRecognizerRef rec, void *ctx) {
-  if (game_codex_state(s_cursor) == CODEX_UNKNOWN) {
-    vibes_short_pulse();
+  s_message = NULL;
+  if (game_rumour_has(s_cursor)) {
+    if (!s_confirm) {
+      s_confirm = true;
+      layer_mark_dirty(s_layer);
+      return;
+    }
+    s_confirm = false;
+    game_drop_rumour(s_cursor);
+    layer_mark_dirty(s_layer);
     return;
   }
-  Item it = probe_item(s_cursor);
-  item_window_push_copy(&it);
+  if (game_codex_state(s_cursor) == CODEX_FOUND) {
+    Item it = probe_item(s_cursor);
+    item_window_push_copy(&it);
+    return;
+  }
+  if (!s_confirm) {
+    s_confirm = true;
+    layer_mark_dirty(s_layer);
+    return;
+  }
+  s_confirm = false;
+  switch (game_buy_rumour(s_cursor)) {
+    case RUMOUR_OK: ui_state_changed(); break;
+    case RUMOUR_FULL: s_message = "All 3 hunts taken"; vibes_short_pulse(); break;
+    case RUMOUR_NO_GOLD: s_message = "Not enough gold"; vibes_short_pulse(); break;
+    case RUMOUR_NONE: vibes_short_pulse(); break;
+  }
+  layer_mark_dirty(s_layer);
 }
 
 // 長押し: 次の区切りの先頭へ（最後の区切りからは最初へ）。見出しを一番上に出す
 static void select_long_click(ClickRecognizerRef rec, void *ctx) {
+  s_confirm = false;
+  s_message = NULL;
   int k = (section_of(s_cursor) + 1) % s_section_count;
   s_cursor = s_sections[k].first;
   s_scroll = entry_y(s_cursor) - LABEL_H;
@@ -242,6 +293,8 @@ static void click_config(void *ctx) {
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
+  s_confirm = false;
+  s_message = NULL;
   build_sections();
   // 横に6マス（1行 = 1つの形の素材6段階）。余った幅はマスを大きくして使う
   int usable = b.size.w - SNAP(PBL_IF_ROUND_ELSE(b.size.w / 6, 2 * PX));

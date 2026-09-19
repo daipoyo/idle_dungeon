@@ -18,6 +18,7 @@
 #define MAX_PORTALS 9
 #define SLEEP_RESTED_SEC (6 * 60 * 60)      // これ以上眠ると Rested
 #define SLEEP_REFRESHED_SEC (7 * 60 * 60)   // これ以上眠ると Refreshed
+#define RUMOUR_SLOTS 3                   // 同時に狙える品の数
 #define SAVED_STEPS_MAX 6000                  // 町にいる間に貯めておける歩数
 #define DROP_EXPIRE_SEC (72 * 60 * 60)   // 死亡時に残した物が消えるまで
 #define POTION_PRICE 25
@@ -276,6 +277,17 @@ int game_codex_seen_count(void);    // 噂で知った物も含めた数
 void game_codex_mark_seen(int i);
 // その品が見つかる場所。buf に "Frost Spire" のように入れる
 void game_codex_source(int i, char *buf, size_t size);
+
+// ---- 噂（狙っている品）----
+//   図鑑から未発見の品を選び、お金を払って狙いを定める。その素材の段階が出るダンジョンにいる間、
+//   その品が出やすくなる。手に入れると枠が空く。期限はない
+typedef enum { RUMOUR_OK, RUMOUR_FULL, RUMOUR_NO_GOLD, RUMOUR_NONE } RumourResult;
+int game_rumour_count(void);
+int game_rumour_at(int slot);        // 図鑑の番号。空きは -1
+bool game_rumour_has(int entry);
+int game_rumour_price(int entry);    // 0 なら狙えない品
+RumourResult game_buy_rumour(int entry);
+void game_drop_rumour(int entry);
 void game_codex_name(int i, char *buf, size_t size);
 int game_codex_rarity(int i);
 
