@@ -31,7 +31,11 @@ static int pick_dungeon(void) {
   if (s_rotate) {
     int all = 1;
     for (int d = 0; d < DUNGEON_COUNT; d++) all &= game_dungeon_cleared(d) ? 1 : 0;
-    if (all) return s_day % DUNGEON_COUNT;
+    if (all) {
+      // 出発するたびに次のダンジョンへ（探索は何日もかかるので、日付では順番がずれる）
+      static int next;
+      return next++ % DUNGEON_COUNT;
+    }
   }
   for (int d = 0; d < DUNGEON_COUNT; d++) {
     if (!game_dungeon_unlocked(d)) continue;
