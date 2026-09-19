@@ -135,8 +135,10 @@ static void update_proc(Layer *layer, GContext *ctx) {
         if (state == CODEX_FOUND) {
           gfx_draw_item(ctx, &it, ix, iy);
         } else if (state == CODEX_SEEN) {
+          // 噂で知っただけの物は、暗い紺の下敷きを敷く（絵はそのまま見せる）
+          graphics_context_set_fill_color(ctx, GColorOxfordBlue);
+          graphics_fill_rect(ctx, GRect(cx + PX, cy + PX, s_cell - 2 * PX, s_cell - 2 * PX), 0, GCornerNone);
           gfx_draw_item(ctx, &it, ix, iy);
-          gfx_dither_over(ctx, GRect(ix, iy, ITEM_ICON_SIZE, ITEM_ICON_SIZE), GColorBlack);
         } else {
           gfx_draw_item_silhouette(ctx, &it, ix, iy, GColorDarkGray);
           gfx_dither_over(ctx, GRect(ix, iy, ITEM_ICON_SIZE, ITEM_ICON_SIZE), GColorBlack);
