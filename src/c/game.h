@@ -267,8 +267,15 @@ UpgradeResult game_upgrade_bag(int bag_index);
 // ---- 図鑑（一度手に入れた物だけ名前が分かる） ----
 //   番号: 0〜基本アイテム数-1 が基本アイテム、その後にセット・固有装備
 int game_codex_size(void);
-int game_codex_seen_count(void);
-bool game_codex_seen(int i);
+// 図鑑の状態。SEEN は噂で知っただけ（達成率には数えない）、FOUND は自分で手に入れた
+typedef enum { CODEX_UNKNOWN, CODEX_SEEN, CODEX_FOUND } CodexState;
+CodexState game_codex_state(int i);
+bool game_codex_found(int i);
+int game_codex_found_count(void);   // 達成率に数えるのはこちら
+int game_codex_seen_count(void);    // 噂で知った物も含めた数
+void game_codex_mark_seen(int i);
+// その品が見つかる場所。buf に "Frost Spire" のように入れる
+void game_codex_source(int i, char *buf, size_t size);
 void game_codex_name(int i, char *buf, size_t size);
 int game_codex_rarity(int i);
 

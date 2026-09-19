@@ -18,7 +18,8 @@
 #define KEY_DROP_BAG 107
 #define KEY_STASH_A 108   // 保管庫の前半 24個（192バイト）
 #define KEY_STASH_B 109   // 保管庫の後半 24個
-#define KEY_CODEX 110     // 図鑑の既読ビット（128バイト）
+#define KEY_CODEX 110     // 図鑑の発見ビット（128バイト）
+#define KEY_CODEX_SEEN 111   // 噂などで見ただけのビット（128バイト）
 #define SAVE_VERSION 2   // 2: 図鑑1000種の番号に変更（それ以前のセーブはリセット）
 
 // ============================================================
@@ -137,7 +138,8 @@ static Item s_drop_bag[BAG_SIZE];
 static bool s_dirty;
 static bool s_alert;            // 振動で知らせたい出来事があった
 static Item s_stash[STASH_SIZE];
-static uint8_t s_codex[CODEX_BYTES];
+static uint8_t s_codex[CODEX_BYTES];        // 自分で手に入れた
+static uint8_t s_codex_seen[CODEX_BYTES];   // 噂で知った・取り逃した
 static bool s_warned_no_steps;
 static bool s_low_hp_alerted;   // 帰り道で「HPが少ない」と知らせたか（保存しない）
 
@@ -744,13 +746,26 @@ int game_codex_size(void) {
   return n < CODEX_BYTES * 8 ? n : CODEX_BYTES * 8;
 }
 
-bool game_codex_seen(int i) {
+bool game_codex_found(int i) {
   if (i < 0 || i >= game_codex_size()) return false;
   return (s_codex[i / 8] >> (i % 8)) & 1;
 }
 
+CodexState game_codex_state(int i) {
+  if (game_codex_found(i)) return CODEX_FOUND;
+  if (i >= 0 && i < game_codex_size() && ((s_codex_seen[i / 8] >> (i % 8)) & 1)) return CODEX_SEEN;
+  return CODEX_UNKNOWN;
+}
+
+// 噂で知った・取り逃した物。自分で手に入れるまでは達成率に数えない
+void game_codex_mark_seen(int i) {
+  if (i < 0 || i >= game_codex_size() || game_codex_state(i) != CODEX_UNKNOWN) return;
+  s_codex_seen[i / 8] |= (uint8_t)(1 << (i % 8));
+  s_dirty = true;
+}
+
 static void codex_set(int i) {
-  if (i < 0 || i >= game_codex_size() || game_codex_seen(i)) return;
+  if (i < 0 || i >= game_codex_size() || game_codex_found(i)) return;
   s_codex[i / 8] |= (uint8_t)(1 << (i % 8));
   s_dirty = true;
 }
@@ -763,12 +778,48 @@ static void codex_mark(const Item *it) {
   else if (game_item_identified(it)) codex_set(BASE_COUNT + special);
 }
 
-int game_codex_seen_count(void) {
+int game_codex_found_count(void) {
   int n = 0;
   for (int i = 0; i < CODEX_BYTES; i++) {
     for (uint8_t b = s_codex[i]; b; b &= (uint8_t)(b - 1)) n++;
   }
   return n;
+}
+
+int game_codex_seen_count(void) {
+  int n = 0;
+  for (int i = 0; i < CODEX_BYTES; i++) {
+    for (uint8_t b = (uint8_t)(s_codex[i] | s_codex_seen[i]); b; b &= (uint8_t)(b - 1)) n++;
+  }
+  return n;
+}
+
+// その品が見つかる場所。基本アイテムは素材の段階から、固有・セット装備は決められたダンジョンから
+void game_codex_source(int i, char *buf, size_t size) {
+  buf[0] = '\0';
+  if (i < 0 || i >= game_codex_size()) return;
+  if (i >= BASE_COUNT) {
+    const SpecialDef *d = &g_specials[i - BASE_COUNT];
+    if (d->dungeon >= DUNGEON_COUNT) snprintf(buf, size, "Anywhere");
+    else if (d->boss) snprintf(buf, size, "%s boss", g_dungeons[d->dungeon].name);
+    else snprintf(buf, size, "%s", g_dungeons[d->dungeon].name);
+    return;
+  }
+  // 素材の段階に合う敵のレベルのダンジョンを探す。1行に収めるため、名前は最初の1つだけ
+  int tier = i % TIER_COUNT;
+  int count = 0;
+  const char *first = NULL;
+  for (int d = 0; d < DUNGEON_COUNT; d++) {
+    if (item_tier_for_level(g_dungeons[d].lvl_min) > tier ||
+        item_tier_for_level(g_dungeons[d].lvl_max) < tier) {
+      continue;
+    }
+    if (!first) first = g_dungeons[d].name;
+    count++;
+  }
+  if (!first) snprintf(buf, size, "Unknown");
+  else if (count == 1) snprintf(buf, size, "%s", first);
+  else snprintf(buf, size, "%s +%d", first, count - 1);
 }
 
 void game_codex_name(int i, char *buf, size_t size) {
@@ -1099,6 +1150,7 @@ static void found_item(int ilvl) {
     s_batch.items++;
     log_push(LOG_ITEM, it.rarity, visible_base(&it), 0, 0);
   } else {
+    game_codex_mark_seen(visible_base(&it));   // 取り逃した物も、見たことにはなる
     log_push(LOG_BAG_FULL, it.rarity, visible_base(&it), 0, 0);
   }
 }
@@ -1115,6 +1167,7 @@ static void found_boss_loot(int dungeon, int ilvl) {
         s_batch.items++;
         log_push(LOG_ITEM, it.rarity, visible_base(&it), 0, 0);
       } else {
+        game_codex_mark_seen(visible_base(&it));
         log_push(LOG_BAG_FULL, it.rarity, visible_base(&it), 0, 0);
       }
       return;
@@ -1724,6 +1777,7 @@ void game_save(void) {
   persist_write_data(KEY_STASH_A, s_stash, sizeof(Item) * (STASH_SIZE / 2));
   persist_write_data(KEY_STASH_B, &s_stash[STASH_SIZE / 2], sizeof(Item) * (STASH_SIZE / 2));
   persist_write_data(KEY_CODEX, s_codex, sizeof(s_codex));
+  persist_write_data(KEY_CODEX_SEEN, s_codex_seen, sizeof(s_codex_seen));
   s_dirty = false;
 }
 
@@ -1739,6 +1793,7 @@ static void new_game(void) {
   memset(s_drop_bag, 0, sizeof(s_drop_bag));
   memset(s_stash, 0, sizeof(s_stash));
   memset(s_codex, 0, sizeof(s_codex));
+  memset(s_codex_seen, 0, sizeof(s_codex_seen));
   s_hero.version = SAVE_VERSION;
   s_hero.level = 1;
   s_hero.gold = 100;
@@ -1781,9 +1836,11 @@ void game_init(void) {
   persist_read_data(KEY_DROP_BAG, s_drop_bag, sizeof(s_drop_bag));
   memset(s_stash, 0, sizeof(s_stash));
   memset(s_codex, 0, sizeof(s_codex));
+  memset(s_codex_seen, 0, sizeof(s_codex_seen));
   persist_read_data(KEY_STASH_A, s_stash, sizeof(Item) * (STASH_SIZE / 2));
   persist_read_data(KEY_STASH_B, &s_stash[STASH_SIZE / 2], sizeof(Item) * (STASH_SIZE / 2));
   bool had_codex = persist_read_data(KEY_CODEX, s_codex, sizeof(s_codex)) > 0;
+  persist_read_data(KEY_CODEX_SEEN, s_codex_seen, sizeof(s_codex_seen));
   if (!had_codex) {
     // 図鑑ができる前のセーブ: 今持っている物から図鑑を作る
     for (int i = 0; i < EQUIP_SLOTS; i++) codex_mark(&s_equip[i]);

@@ -333,6 +333,16 @@ void gfx_draw_item_silhouette(GContext *ctx, const Item *it, int x, int y, GColo
   draw_icon_record(ctx, rec, pal, x, y, PX);
 }
 
+// 市松模様に色を重ねて暗く見せる（図鑑の「噂で知っただけ」の品など）
+void gfx_dither_over(GContext *ctx, GRect box, GColor color) {
+  graphics_context_set_fill_color(ctx, color);
+  for (int y = 0; y < box.size.h; y += PX) {
+    for (int x = ((y / PX) % 2) * PX; x < box.size.w; x += 2 * PX) {
+      graphics_fill_rect(ctx, GRect(box.origin.x + x, box.origin.y + y, PX, PX), 0, GCornerNone);
+    }
+  }
+}
+
 void gfx_draw_ui_icon(GContext *ctx, int icon, int x, int y) {
   uint8_t rec[ITEM_ICON_RECORD];
   GColor pal[7];

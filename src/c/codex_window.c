@@ -92,9 +92,9 @@ static Item probe_item(int entry) {
   return it;
 }
 
-static int seen_in(const Section *sec) {
+static int found_in(const Section *sec) {
   int n = 0;
-  for (int i = 0; i < sec->count; i++) n += game_codex_seen(sec->first + i) ? 1 : 0;
+  for (int i = 0; i < sec->count; i++) n += game_codex_found(sec->first + i) ? 1 : 0;
   return n;
 }
 
@@ -119,7 +119,7 @@ static void update_proc(Layer *layer, GContext *ctx) {
     const Section *sec = &s_sections[k];
     int h = section_height(sec);
     if (y + h > grid_top && y < grid_bot) {
-      snprintf(buf, sizeof(buf), "%s %d/%d", sec->label, seen_in(sec), sec->count);
+      snprintf(buf, sizeof(buf), "%s %d/%d", sec->label, found_in(sec), sec->count);
       gfx_text(ctx, buf, GRect(x0, y + PX, s_cols * s_cell, LINE_H), GTextAlignmentLeft,
                k == section_of(s_cursor) ? THEME_GOLD : THEME_SUB);
       for (int i = 0; i < sec->count; i++) {
@@ -130,8 +130,17 @@ static void update_proc(Layer *layer, GContext *ctx) {
         Item it = probe_item(entry);
         int ix = cx + (s_cell - ITEM_ICON_SIZE) / 2;
         int iy = cy + (s_cell - ITEM_ICON_SIZE) / 2;
-        if (game_codex_seen(entry)) gfx_draw_item(ctx, &it, ix, iy);
-        else gfx_draw_item_silhouette(ctx, &it, ix, iy, GColorDarkGray);
+        // 手に入れた物はそのまま、噂で知った物は暗く、知らない物は影絵
+        CodexState state = game_codex_state(entry);
+        if (state == CODEX_FOUND) {
+          gfx_draw_item(ctx, &it, ix, iy);
+        } else if (state == CODEX_SEEN) {
+          gfx_draw_item(ctx, &it, ix, iy);
+          gfx_dither_over(ctx, GRect(ix, iy, ITEM_ICON_SIZE, ITEM_ICON_SIZE), GColorBlack);
+        } else {
+          gfx_draw_item_silhouette(ctx, &it, ix, iy, GColorDarkGray);
+          gfx_dither_over(ctx, GRect(ix, iy, ITEM_ICON_SIZE, ITEM_ICON_SIZE), GColorBlack);
+        }
         if (entry == s_cursor) {
           graphics_context_set_stroke_color(ctx, THEME_HI);
           graphics_context_set_stroke_width(ctx, 1);
@@ -146,7 +155,13 @@ static void update_proc(Layer *layer, GContext *ctx) {
   // 見出し
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, GRect(0, 0, b.size.w, grid_top), 0, GCornerNone);
-  snprintf(buf, sizeof(buf), "CODEX %d/%d", game_codex_seen_count(), game_codex_size());
+  int seen_total = game_codex_seen_count() - game_codex_found_count();
+  if (seen_total > 0) {
+    snprintf(buf, sizeof(buf), "CODEX %d/%d +%d SEEN", game_codex_found_count(), game_codex_size(),
+             seen_total);
+  } else {
+    snprintf(buf, sizeof(buf), "CODEX %d/%d", game_codex_found_count(), game_codex_size());
+  }
   gfx_text(ctx, buf, GRect(0, (grid_top - TEXT_H) / 2, b.size.w, LINE_H), GTextAlignmentCenter, THEME_GOLD);
   draw_rule(ctx, grid_top - PX, b.size.w);
 
@@ -157,16 +172,23 @@ static void update_proc(Layer *layer, GContext *ctx) {
   int fx = SNAP(PBL_IF_ROUND_ELSE(b.size.w / 5, 2 * PX));
   int fw = b.size.w - fx * 2;
   GTextAlignment align = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
-  bool seen = game_codex_seen(s_cursor);
+  CodexState state = game_codex_state(s_cursor);
   Item it = probe_item(s_cursor);
-  if (seen) {
-    game_codex_name(s_cursor, buf, sizeof(buf));
-    gfx_text(ctx, buf, GRect(fx, grid_bot + 2 * PX, fw, LINE_H), align, gfx_rarity_color(&it));
-  } else {
+  if (state == CODEX_UNKNOWN) {
     gfx_text(ctx, "???", GRect(fx, grid_bot + 2 * PX, fw, LINE_H), align, THEME_DIM);
+  } else {
+    game_codex_name(s_cursor, buf, sizeof(buf));
+    gfx_text(ctx, buf, GRect(fx, grid_bot + 2 * PX, fw, LINE_H), align,
+             state == CODEX_FOUND ? gfx_rarity_color(&it) : THEME_SUB);
   }
-  snprintf(buf, sizeof(buf), "No.%03d  %s", s_cursor + 1, seen ? "SELECT: info" : "Not found yet");
-  gfx_text(ctx, buf, GRect(fx, grid_bot + 2 * PX + LINE_H, fw, LINE_H), align, THEME_SUB);
+  // 2行目: 番号と、手に入れた物なら案内、まだの物は見つかる場所
+  static char place[24];
+  game_codex_source(s_cursor, place, sizeof(place));
+  if (state == CODEX_FOUND) snprintf(buf, sizeof(buf), "No.%03d  SELECT: info", s_cursor + 1);
+  else if (state == CODEX_SEEN) snprintf(buf, sizeof(buf), "Seen: %s", place);
+  else snprintf(buf, sizeof(buf), "No.%03d  %s", s_cursor + 1, place);
+  gfx_text(ctx, buf, GRect(fx, grid_bot + 2 * PX + LINE_H, fw, LINE_H), align,
+           state == CODEX_SEEN ? THEME_HI : THEME_SUB);
 }
 
 // カーソルが見えるようにスクロールする（区切りの先頭の行では見出しも見せる）
@@ -191,7 +213,7 @@ static void up_click(ClickRecognizerRef rec, void *ctx) { move_cursor(-1); }
 static void down_click(ClickRecognizerRef rec, void *ctx) { move_cursor(1); }
 
 static void select_click(ClickRecognizerRef rec, void *ctx) {
-  if (!game_codex_seen(s_cursor)) {
+  if (game_codex_state(s_cursor) == CODEX_UNKNOWN) {
     vibes_short_pulse();
     return;
   }

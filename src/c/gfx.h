@@ -62,6 +62,8 @@ void gfx_draw_item(GContext *ctx, const Item *it, int x, int y);
 void gfx_draw_item_scaled(GContext *ctx, const Item *it, int x, int y, int dot);
 // 影だけを1色で描く（図鑑のまだ見つけていない物）
 void gfx_draw_item_silhouette(GContext *ctx, const Item *it, int x, int y, GColor color);
+// 市松模様に色を重ねて暗く見せる（図鑑の「噂で知っただけ」の品）
+void gfx_dither_over(GContext *ctx, GRect box, GColor color);
 // 画面用のアイコン（UI_ICON_*。ITEM_ICON_SIZE 四方）
 void gfx_draw_ui_icon(GContext *ctx, int icon, int x, int y);
 // 固有・セット装備の飾り: アイコンの四隅の枠（金・緑）と、角で瞬くきらめき。

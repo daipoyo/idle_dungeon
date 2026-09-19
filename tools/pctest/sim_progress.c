@@ -96,16 +96,16 @@ int main(int argc, char **argv) {
       if (!cleared_on[d]) {
         cleared_on[d] = day;
         printf("  %4d  %3d  %5ld  %4d/%d   %d/%d    cleared %s\n", day, game_level(),
-               (long)game_gold(), game_codex_seen_count(), game_codex_size(), cleared, DUNGEON_COUNT,
+               (long)game_gold(), game_codex_found_count(), game_codex_size(), cleared, DUNGEON_COUNT,
                g_dungeons[d].name);
       }
     }
     if (cleared == DUNGEON_COUNT && !all_cleared_on) all_cleared_on = day;
-    if (!codex_full_on && game_codex_seen_count() >= game_codex_size()) codex_full_on = day;
+    if (!codex_full_on && game_codex_found_count() >= game_codex_size()) codex_full_on = day;
 
     if (day % 365 == 0 || day == 30 || day == 90 || day == 180) {
       printf("  %4d  %3d  %5ld  %4d/%d   %d/%d    (%d deaths so far)\n", day, game_level(),
-             (long)game_gold(), game_codex_seen_count(), game_codex_size(), cleared, DUNGEON_COUNT,
+             (long)game_gold(), game_codex_found_count(), game_codex_size(), cleared, DUNGEON_COUNT,
              deaths);
     }
     if (codex_full_on) break;
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
   else printf("not within %d years\n", YEARS);
   printf("Codex complete: ");
   if (codex_full_on) printf("day %d (%.1f years)\n", codex_full_on, codex_full_on / 365.0);
-  else printf("not within %d years (%d / %d found)\n", YEARS, game_codex_seen_count(), game_codex_size());
+  else printf("not within %d years (%d / %d found)\n", YEARS, game_codex_found_count(), game_codex_size());
   printf("Deaths: %d\n", deaths);
 
   // 何が残っているかの内訳
@@ -124,14 +124,14 @@ int main(int argc, char **argv) {
   int miss_rank[4] = { 0 };
   for (int shape = 0; shape < SHAPE_COUNT; shape++) {
     for (int t = 0; t < TIER_COUNT; t++) {
-      if (game_codex_seen(shape * TIER_COUNT + t)) continue;
+      if (game_codex_found(shape * TIER_COUNT + t)) continue;
       miss_tier[t]++;
       miss_rank[g_shapes[shape].rank & 3]++;
     }
   }
   int miss_uniq = 0, miss_set = 0, miss_boss = 0;
   for (int i = 0; i < g_special_count; i++) {
-    if (game_codex_seen(BASE_COUNT + i)) continue;
+    if (game_codex_found(BASE_COUNT + i)) continue;
     if (g_specials[i].set_id) miss_set++;
     else miss_uniq++;
     if (g_specials[i].boss) miss_boss++;

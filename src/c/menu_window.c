@@ -97,7 +97,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     case CMD_CODEX:
       row.icon = UI_ICON_CODEX;
       row.title = "Codex";
-      snprintf(sub, sizeof(sub), "%d/%d found", game_codex_seen_count(), game_codex_size());
+      snprintf(sub, sizeof(sub), "%d/%d found", game_codex_found_count(), game_codex_size());
       row.sub = sub;
       break;
     case CMD_IDENTIFY:

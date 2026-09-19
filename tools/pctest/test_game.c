@@ -466,12 +466,12 @@ static void test_codex(void) {
   puts("Codex");
   reset_game(44);
   Item sword = make_item(SH_SHORT_SWORD, 1), tunic = make_item(SH_TUNIC, 1);
-  check(game_codex_seen(sword.base - 1) && game_codex_seen(tunic.base - 1), "starting gear is in the codex");
-  int before = game_codex_seen_count();
+  check(game_codex_found(sword.base - 1) && game_codex_found(tunic.base - 1), "starting gear is in the codex");
+  int before = game_codex_found_count();
 
   Item amulet = make_item(SH_LOCKET, 5);
   bag_add(&amulet);
-  check(game_codex_seen(amulet.base - 1) && game_codex_seen_count() == before + 1,
+  check(game_codex_found(amulet.base - 1) && game_codex_found_count() == before + 1,
         "picking up an item records it");
   char name[32];
   game_codex_name(amulet.base - 1, name, sizeof(name));
@@ -482,28 +482,28 @@ static void test_codex(void) {
   Item uniq = make_special_item(special, 5);
   memset(s_bag, 0, sizeof(s_bag));
   bag_add(&uniq);
-  check(!game_codex_seen(BASE_COUNT + special), "an unidentified unique stays ???");
+  check(!game_codex_found(BASE_COUNT + special), "an unidentified unique stays ???");
   game_item_short_name(&uniq, name, sizeof(name));
   check(strcmp(name, "Bronze Knife") == 0, "an unidentified unique shows its base name");
   check(visible_base(&uniq) == SH_KNIFE * TIER_COUNT, "logs hide an unidentified unique");
   s_hero.scrolls_id = 1;
   game_identify_with_scroll(0);
-  check(game_codex_seen(BASE_COUNT + special), "identifying reveals it");
+  check(game_codex_found(BASE_COUNT + special), "identifying reveals it");
   game_item_short_name(&s_bag[0], name, sizeof(name));
   check(strcmp(name, "Ratcatcher") == 0, "identified uniques show their own name");
 
   game_save();
   memset(s_codex, 0, sizeof(s_codex));
   game_init();
-  check(game_codex_seen(BASE_COUNT + special), "the codex survives a reload");
+  check(game_codex_found(BASE_COUNT + special), "the codex survives a reload");
 
   // 図鑑のない古いセーブは、持ち物から作り直す
   persist_delete(KEY_CODEX);
   game_init();
-  check(game_codex_seen(sword.base - 1) && game_codex_seen(BASE_COUNT + special) &&
-            !game_codex_seen(amulet.base - 1),
+  check(game_codex_found(sword.base - 1) && game_codex_found(BASE_COUNT + special) &&
+            !game_codex_found(amulet.base - 1),
         "old saves rebuild the codex from what is carried");
-  printf("  codex: %d / %d entries\n", game_codex_seen_count(), game_codex_size());
+  printf("  codex: %d / %d entries\n", game_codex_found_count(), game_codex_size());
 
   // 保存形式が古いセーブ（version 1）はリセットする
   s_hero.version = 1;
@@ -683,6 +683,68 @@ static void test_compare(void) {
         "a second ring goes in the empty finger, not against the good one");
 }
 
+static void test_codex_states(void) {
+  puts("Codex: seen and found");
+  reset_game(61);
+  memset(s_codex, 0, sizeof(s_codex));
+  memset(s_codex_seen, 0, sizeof(s_codex_seen));
+
+  int entry = SH_LONG_SWORD * TIER_COUNT + 2;
+  check(game_codex_state(entry) == CODEX_UNKNOWN, "an untouched entry is unknown");
+  game_codex_mark_seen(entry);
+  check(game_codex_state(entry) == CODEX_SEEN, "a rumour marks it as seen");
+  check(game_codex_found_count() == 0, "seen entries do not count as found");
+  check(game_codex_seen_count() == 1, "but they do show in the seen count");
+
+  Item it = make_item(SH_LONG_SWORD, 20);
+  it.base = (uint16_t)(entry + 1);
+  bag_add(&it);
+  check(game_codex_state(entry) == CODEX_FOUND, "picking it up turns seen into found");
+  check(game_codex_found_count() == 1 && game_codex_seen_count() == 1,
+        "an entry is counted once, as found");
+
+  // 手に入れた物に噂が来ても、状態は下がらない
+  game_codex_mark_seen(entry);
+  check(game_codex_state(entry) == CODEX_FOUND, "a rumour never undoes a find");
+
+  int other = SH_CLAYMORE * TIER_COUNT + 5;
+  game_codex_mark_seen(other);
+  game_save();
+  memset(s_codex, 0, sizeof(s_codex));
+  memset(s_codex_seen, 0, sizeof(s_codex_seen));
+  game_init();
+  check(game_codex_state(entry) == CODEX_FOUND && game_codex_state(other) == CODEX_SEEN,
+        "both states survive a reload");
+
+  // 持ち物がいっぱいのときに落ちた物は、見たことになる
+  memset(s_codex, 0, sizeof(s_codex));
+  memset(s_codex_seen, 0, sizeof(s_codex_seen));
+  for (int i = 0; i < BAG_SIZE; i++) s_bag[i] = make_item(SH_KNIFE, 5);
+  game_depart(0);
+  s_run.depth = 100;
+  int seen_before = game_codex_seen_count();
+  for (int i = 0; i < 40; i++) found_item(10);
+  check(game_codex_seen_count() > seen_before, "loot left behind with a full bag is marked seen");
+  check(game_codex_found_count() <= 1, "but it is not counted as found");
+  s_run.mode = RUN_NONE;
+
+  // 出典
+  char place[24];
+  game_codex_source(SH_SHORT_SWORD * TIER_COUNT + 0, place, sizeof(place));
+  printf("  tier 0 short sword: %s\n", place);
+  check(strcmp(place, "Mossy Cellar +1") == 0, "the lowest tier points at the first dungeons");
+  game_codex_source(SH_SHORT_SWORD * TIER_COUNT + 5, place, sizeof(place));
+  printf("  tier 5 short sword: %s\n", place);
+  check(strcmp(place, "Abyssal Gate") == 0, "the top tier points at the last dungeon");
+  for (int i = 0; i < g_special_count; i++) {
+    if (!g_specials[i].boss) continue;
+    game_codex_source(BASE_COUNT + i, place, sizeof(place));
+    printf("  a boss unique: %s\n", place);
+    check(strstr(place, "boss") != NULL, "boss uniques say so");
+    break;
+  }
+}
+
 // 実際に歩いて遊んだときの様子（バランス確認）
 //   margin: ダンジョン選びの強気さ（敵のレベルが「勇者のレベル + margin」までなら入る）
 static void play_days(int days, int margin, bool verbose) {
@@ -740,6 +802,7 @@ int main(void) {
   test_stash();
   test_blacksmith();
   test_codex();
+  test_codex_states();
   test_saved_steps();
   test_sleep();
   test_compare();
