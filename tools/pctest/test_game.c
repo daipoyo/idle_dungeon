@@ -839,6 +839,48 @@ static void test_rumours(void) {
   check(game_rumour_has(BASE_COUNT + special), "hunts survive a reload");
 }
 
+static void test_tavern(void) {
+  puts("Tavern (the day's rumours)");
+  reset_game(83);
+  s_hero.gold = 100000;
+  s_hero.cleared = 0x07;   // 最初の3つを制覇したところ
+  memset(s_rumours, 0, sizeof(s_rumours));
+
+  int offers[TAVERN_OFFERS];
+  int specials = 0;
+  for (int i = 0; i < TAVERN_OFFERS; i++) {
+    offers[i] = game_tavern_offer(i);
+    check(offers[i] >= 0, "the tavern has something to say");
+    check(!game_codex_found(offers[i]), "it never talks about gear the hero already owns");
+    char name[40], place[24];
+    game_codex_name(offers[i], name, sizeof(name));
+    game_codex_source(offers[i], place, sizeof(place));
+    printf("  %-22s %5dG  %s\n", name, game_tavern_price(offers[i]), place);
+    if (offers[i] >= BASE_COUNT) specials++;
+  }
+  check(specials >= 1, "one of them is about a unique or a set piece");
+  check(offers[0] != offers[1] && offers[1] != offers[2], "no two are the same");
+  check(game_tavern_offer(0) == offers[0], "the same rumours stay all day");
+
+  // 入れないダンジョンの話はしない
+  for (int i = 0; i < TAVERN_OFFERS; i++) {
+    if (offers[i] < BASE_COUNT) continue;
+    int d = g_specials[offers[i] - BASE_COUNT].dungeon;
+    check(d >= DUNGEON_COUNT || game_dungeon_unlocked(d), "uniques come from dungeons the hero can enter");
+  }
+
+  check(game_tavern_price(offers[0]) == game_rumour_price(offers[0]) * 60 / 100,
+        "the tavern is cheaper than asking around");
+  int32_t gold = game_gold();
+  check(game_buy_tavern(0) == RUMOUR_OK, "a rumour can be bought");
+  check(game_rumour_has(offers[0]), "it becomes a hunt");
+  check(game_gold() == gold - game_tavern_price(offers[0]), "and it costs what it said");
+  check(game_buy_tavern(0) == RUMOUR_NONE, "buying the same one twice does nothing");
+
+  s_hero.gold = 0;
+  check(game_buy_tavern(1) == RUMOUR_NO_GOLD, "no coin, no story");
+}
+
 // 実際に歩いて遊んだときの様子（バランス確認）
 //   margin: ダンジョン選びの強気さ（敵のレベルが「勇者のレベル + margin」までなら入る）
 static void play_days(int days, int margin, bool verbose) {
@@ -898,6 +940,7 @@ int main(void) {
   test_codex();
   test_codex_states();
   test_rumours();
+  test_tavern();
   test_saved_steps();
   test_sleep();
   test_compare();

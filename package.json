@@ -43,6 +43,7 @@
         { "type": "bitmap", "name": "IMG_FACE_APPRAISER", "file": "images/face_appraiser.png" },
         { "type": "bitmap", "name": "IMG_FACE_STASH", "file": "images/face_stash.png" },
         { "type": "bitmap", "name": "IMG_FACE_AGENT", "file": "images/face_agent.png" },
+        { "type": "bitmap", "name": "IMG_FACE_TAVERN", "file": "images/face_tavern.png" },
         { "type": "raw", "name": "ITEM_ICONS", "file": "data/item_icons.bin" },
         { "type": "raw", "name": "ITEM_NAMES", "file": "data/item_names.bin" }
       ]

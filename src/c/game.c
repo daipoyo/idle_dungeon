@@ -908,6 +908,105 @@ RumourResult game_buy_rumour(int entry) {
   return RUMOUR_FULL;
 }
 
+// ---- 酒場 ----
+//   その日に聞ける噂は日付から決まる（アプリを開き直しても変わらない）。
+//   まだ手に入れていない品で、今入れるダンジョンで出るものだけが並ぶ
+static bool tavern_ok(int entry) {
+  if (game_codex_found(entry)) return false;
+  if (entry >= BASE_COUNT) {
+    const SpecialDef *d = &g_specials[entry - BASE_COUNT];
+    return d->dungeon >= DUNGEON_COUNT || game_dungeon_unlocked(d->dungeon);
+  }
+  int tier = entry % TIER_COUNT;
+  for (int d = 0; d < DUNGEON_COUNT; d++) {
+    if (!game_dungeon_unlocked(d)) continue;
+    if (item_tier_for_level(g_dungeons[d].lvl_min) <= tier &&
+        item_tier_for_level(g_dungeons[d].lvl_max) >= tier) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// 同じような品ばかり並ばないように、素材の段階や種類でしぼって選ぶ
+//   kind: 0 = 基本アイテム、1 = 固有・セット装備   skip_tiers: すでに並んでいる段階のビット
+static bool tavern_match(int entry, int kind, uint8_t skip_tiers) {
+  if (!tavern_ok(entry)) return false;
+  if (kind == 1) return entry >= BASE_COUNT;
+  if (entry >= BASE_COUNT) return false;
+  return !(skip_tiers & (1 << (entry % TIER_COUNT)));
+}
+
+static int tavern_pick(uint32_t seed, int kind, uint8_t skip_tiers) {
+  int count = 0;
+  for (int i = 0; i < game_codex_size(); i++) count += tavern_match(i, kind, skip_tiers) ? 1 : 0;
+  if (!count) return -1;
+  uint32_t h = seed * 2654435761u;
+  h ^= h >> 15;
+  h *= 2246822519u;
+  h ^= h >> 13;
+  int want = (int)(h % (uint32_t)count);
+  for (int i = 0; i < game_codex_size(); i++) {
+    if (!tavern_match(i, kind, skip_tiers)) continue;
+    if (want-- == 0) return i;
+  }
+  return -1;
+}
+
+int game_tavern_offer(int slot) {
+  static uint32_t s_day;
+  static int s_offers[TAVERN_OFFERS];
+  static bool s_ready;
+  if (slot < 0 || slot >= TAVERN_OFFERS) return -1;
+  uint32_t day = (uint32_t)(steps_day_start(time(NULL)) / SECONDS_PER_DAY);
+  if (!s_ready || day != s_day) {
+    s_day = day;
+    s_ready = true;
+    // 最後の1つは固有・セット装備の噂にする（なければ基本アイテムで埋める）
+    uint8_t used_tiers = 0;
+    for (int i = 0; i < TAVERN_OFFERS; i++) {
+      s_offers[i] = -1;
+      int kind = i == TAVERN_OFFERS - 1 ? 1 : 0;
+      for (int tries = 0; tries < 12 && s_offers[i] < 0; tries++) {
+        // 何度か外したら、段階のしぼりや種類のしぼりをゆるめる
+        uint8_t skip = tries < 6 ? used_tiers : 0;
+        int entry = tavern_pick(day * 16 + (uint32_t)(i * 4 + tries), tries < 9 ? kind : 0, skip);
+        bool dup = false;
+        for (int k = 0; k < i; k++) dup |= s_offers[k] == entry;
+        if (entry >= 0 && !dup) s_offers[i] = entry;
+      }
+      if (s_offers[i] >= 0 && s_offers[i] < BASE_COUNT) {
+        used_tiers |= (uint8_t)(1 << (s_offers[i] % TIER_COUNT));
+      }
+    }
+  }
+  // その日のうちに手に入れた品は、もう並べない
+  if (s_offers[slot] >= 0 && game_codex_found(s_offers[slot])) return -1;
+  return s_offers[slot];
+}
+
+int game_tavern_price(int entry) {
+  int price = game_rumour_price(entry);
+  return price ? price * 60 / 100 : 0;   // 自分で聞き回るより安い
+}
+
+RumourResult game_buy_tavern(int slot) {
+  int entry = game_tavern_offer(slot);
+  int price = game_tavern_price(entry);
+  if (entry < 0 || !price || game_rumour_has(entry)) return RUMOUR_NONE;
+  if (game_rumour_count() >= RUMOUR_SLOTS) return RUMOUR_FULL;
+  if (s_hero.gold < price) return RUMOUR_NO_GOLD;
+  for (int i = 0; i < RUMOUR_SLOTS; i++) {
+    if (s_rumours[i]) continue;
+    s_hero.gold -= price;
+    s_rumours[i] = (uint16_t)(entry + 1);
+    game_codex_mark_seen(entry);
+    game_save();
+    return RUMOUR_OK;
+  }
+  return RUMOUR_FULL;
+}
+
 void game_drop_rumour(int entry) {
   for (int i = 0; i < RUMOUR_SLOTS; i++) {
     if (s_rumours[i] != entry + 1) continue;

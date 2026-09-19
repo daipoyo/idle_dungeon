@@ -14,6 +14,7 @@ typedef enum {
   CMD_SMITH,
   CMD_IDENTIFY,
   CMD_AGENT,
+  CMD_TAVERN,
   CMD_CODEX,
   CMD_SETTINGS,
   CMD_PORTAL,
@@ -35,6 +36,7 @@ static int build_commands(Command *out) {
     out[n++] = CMD_SMITH;
     if (game_unidentified_count() > 0) out[n++] = CMD_IDENTIFY;
     if (game_drop_exists()) out[n++] = CMD_AGENT;
+    out[n++] = CMD_TAVERN;
     out[n++] = CMD_CODEX;
     out[n++] = CMD_SETTINGS;
   } else {
@@ -93,6 +95,11 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
       row.icon = UI_ICON_SMITH;
       row.title = "Blacksmith";
       row.sub = "Upgrade to +10";
+      break;
+    case CMD_TAVERN:
+      row.icon = UI_ICON_TAVERN;
+      row.title = "Tavern";
+      row.sub = "Rumours & ale";
       break;
     case CMD_CODEX:
       row.icon = UI_ICON_CODEX;
@@ -158,6 +165,9 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
       break;
     case CMD_SMITH:
       smith_window_push();
+      break;
+    case CMD_TAVERN:
+      tavern_window_push();
       break;
     case CMD_CODEX:
       codex_window_push();
