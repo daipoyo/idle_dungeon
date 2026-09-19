@@ -23,7 +23,9 @@ int pctest_persist_len[PCTEST_PERSIST_KEYS];
 // その日に入るダンジョンを選ぶ
 //   まだ倒していない一番浅いダンジョンを目標にする。ただし敵が強すぎる間は、
 //   入れるなかで一番深い（実力に見合う）ダンジョンで鍛える
-static bool s_rotate;   // 制覇後は毎日ちがうダンジョンへ（図鑑集め）
+static bool s_rotate;
+static bool s_hunt;   // 噂を買って狙い撃ちする
+static int s_next_dungeon;   // 制覇後は毎日ちがうダンジョンへ（図鑑集め）
 static int s_day;
 
 static int pick_dungeon(void) {
@@ -34,6 +36,7 @@ static int pick_dungeon(void) {
     if (all) {
       // 出発するたびに次のダンジョンへ（探索は何日もかかるので、日付では順番がずれる）
       static int next;
+      s_next_dungeon = next + 1;
       return next++ % DUNGEON_COUNT;
     }
   }
@@ -61,6 +64,30 @@ static void town_chores(void) {
   for (int i = BAG_SIZE - 1; i >= 0; i--) {
     if (game_bag(i)) game_sell_bag(i);
   }
+  // 余ったお金で噂を買う。次に行くダンジョンで出る品だけを狙う（遊ぶ人と同じ選び方）
+  while (s_hunt && game_rumour_count() < RUMOUR_SLOTS) {
+    int d = s_next_dungeon % DUNGEON_COUNT;
+    int lo = item_tier_for_level(g_dungeons[d].lvl_min);
+    int hi = item_tier_for_level(g_dungeons[d].lvl_max);
+    int pick = -1;
+    for (int tries = 0; tries < 200 && pick < 0; tries++) {
+      int entry;
+      if (rand() % 4 == 0) {
+        // 4回に1回は、そのダンジョンの固有・セット装備を狙う
+        int i = rand() % g_special_count;
+        if (g_specials[i].dungeon != d) continue;
+        entry = BASE_COUNT + i;
+      } else {
+        int shape = rand() % SHAPE_COUNT;
+        entry = shape * TIER_COUNT + lo + (hi > lo ? rand() % (hi - lo + 1) : 0);
+      }
+      if (!game_codex_found(entry) && !game_rumour_has(entry)) pick = entry;
+    }
+    if (pick < 0) break;
+    int price = game_rumour_price(pick);
+    if (!price || game_gold() < price * 4) break;
+    if (game_buy_rumour(pick) != RUMOUR_OK) break;
+  }
   while (game_potions() < MAX_POTIONS && game_buy_potion() == BUY_OK) {}
   while (game_portals() < 2 && game_buy_portal() == BUY_OK) {}
 }
@@ -68,6 +95,7 @@ static void town_chores(void) {
 int main(int argc, char **argv) {
   int steps_per_day = argc > 1 ? atoi(argv[1]) : 4000;
   s_rotate = argc > 2 && strcmp(argv[2], "rotate") == 0;
+  s_hunt = argc > 3 && strcmp(argv[3], "hunt") == 0;   // 噂を買って狙い撃ちする
   memset(pctest_persist_len, 0, sizeof(pctest_persist_len));
   pctest_steps_today = 0;
   game_init();
