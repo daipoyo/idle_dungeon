@@ -663,6 +663,17 @@ static void test_compare(void) {
   unident.flags = 0;
   check(game_item_compare(&unident, NULL, NULL) == CMP_NONE, "unidentified gear cannot be compared");
 
+  // ダンジョンの中でも装備を変えられる
+  memset(s_equip, 0, sizeof(s_equip));
+  memset(s_bag, 0, sizeof(s_bag));
+  bag_add(&strong);
+  game_depart(0);
+  check(game_run_mode() != RUN_NONE, "the hero is in the dungeon");
+  check(game_equip_from_bag(0), "gear can be changed in the dungeon");
+  check(s_equip[SLOT_WEAPON].base == strong.base, "the weapon is worn right away");
+  check(game_unequip(SLOT_WEAPON), "gear can be taken off in the dungeon");
+  s_run.mode = RUN_NONE;
+
   // 指輪は空いている方と入れ替わる
   Item ring = make_item(SH_MOON_RING, 10);
   s_equip[SLOT_RING1] = make_item(SH_MOON_RING, 40);

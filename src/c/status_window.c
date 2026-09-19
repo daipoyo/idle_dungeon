@@ -126,7 +126,7 @@ static int16_t get_header_height(MenuLayer *menu, uint16_t section, void *data) 
 static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *data) {
   static char buf[24];
   if (section == 1) {
-    gfx_draw_header(ctx, cell, game_can_change_gear() ? "EQUIPMENT" : "EQUIP (LOCKED)");
+    gfx_draw_header(ctx, cell, "EQUIPMENT");
   } else if (section == 2) {
     snprintf(buf, sizeof(buf), "BAG %d/%d", game_bag_count(), BAG_SIZE);
     gfx_draw_header(ctx, cell, buf);

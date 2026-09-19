@@ -35,10 +35,6 @@ static Action current_action(const Item *it, const char **hint) {
   *hint = NULL;
   if (!s_allow_action || !it) return ACT_NONE;
   if (s_place == ITEM_AT_EQUIP) {
-    if (!game_can_change_gear()) {
-      *hint = "Gear is locked in the dungeon";
-      return ACT_NONE;
-    }
     *hint = "SELECT: Take off";
     return ACT_UNEQUIP;
   }
@@ -49,10 +45,6 @@ static Action current_action(const Item *it, const char **hint) {
       return ACT_SCROLL;
     }
     *hint = "Take it to the Appraiser";
-    return ACT_NONE;
-  }
-  if (!game_can_change_gear()) {
-    *hint = "Gear is locked in the dungeon";
     return ACT_NONE;
   }
   *hint = "SELECT: Equip";

@@ -8,6 +8,7 @@
 //   持ち物の中の未鑑定の品を、お金を払って調べてもらう
 //   巻物はダンジョンでも使えるので、持ち物画面（status_window）から使う
 //   上に片眼鏡の老学者の顔とセリフ。鑑定した物のレア度でセリフが変わる
+//   鑑定できたら、正体が分かった品の詳細をそのまま開く（その場で身に着けられる）
 // ============================================================
 static Window *s_window;
 static MenuLayer *s_menu;
@@ -90,7 +91,10 @@ static void after_identify(IdentResult r, int bag) {
       if (rarity == RARITY_UNIQUE) say("By the stars... a true legend!");
       else if (rarity == RARITY_SET) say("Part of a set! Find the rest.");
       else say("Aha. Quite a find, this one.");
-      break;
+      ui_state_changed();
+      menu_layer_reload_data(s_menu);
+      item_window_push(ITEM_AT_BAG, bag, true);   // 正体を見せる
+      return;
     }
     case IDENT_NO_GOLD:
       say("My eyes aren't free, friend.");

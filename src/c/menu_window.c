@@ -81,7 +81,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     case CMD_STATUS:
       row.icon = UI_ICON_STATUS;
       row.title = "Status";
-      row.sub = game_can_change_gear() ? "Gear & bag" : "View only";
+      row.sub = "Gear & bag";
       break;
     case CMD_STASH:
       row.icon = UI_ICON_STASH;

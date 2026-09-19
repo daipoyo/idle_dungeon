@@ -228,7 +228,6 @@ void game_effect_text(Effect fx, int value, char *buf, size_t size);
 const Item *game_equipped(int slot);
 const Item *game_bag(int i);
 int game_bag_count(void);
-bool game_can_change_gear(void);
 bool game_equip_from_bag(int bag_index);
 bool game_unequip(int slot);
 bool game_sell_bag(int bag_index);

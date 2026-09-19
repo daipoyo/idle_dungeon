@@ -801,8 +801,6 @@ static void bag_remove(int i) {
   s_dirty = true;
 }
 
-bool game_can_change_gear(void) { return s_run.mode == RUN_NONE; }
-
 // その品を身に着けるとき、どの部位の物と入れ替わるか（指輪は空いている方へ）
 static int equip_target_slot(const ShapeDef *sh) {
   int slot = sh->slot;
@@ -834,7 +832,6 @@ Compare game_item_compare(const Item *it, const Item **now, ItemStats *diff) {
 }
 
 bool game_equip_from_bag(int bag_index) {
-  if (!game_can_change_gear()) return false;
   const Item *it = game_bag(bag_index);
   const ShapeDef *sh = game_item_shape(it);
   if (!sh) return false;
@@ -850,7 +847,7 @@ bool game_equip_from_bag(int bag_index) {
 }
 
 bool game_unequip(int slot) {
-  if (!game_can_change_gear() || !game_equipped(slot)) return false;
+  if (!game_equipped(slot)) return false;
   if (!bag_add(&s_equip[slot])) return false;
   memset(&s_equip[slot], 0, sizeof(Item));
   game_save();
@@ -858,7 +855,6 @@ bool game_unequip(int slot) {
 }
 
 bool game_sell_bag(int bag_index) {
-  if (!game_can_change_gear()) return false;
   const Item *it = game_bag(bag_index);
   if (!it) return false;
   s_hero.gold += game_item_price(it);
