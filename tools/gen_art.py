@@ -11,6 +11,7 @@
   src/c/art_info.h         … 画像サイズや背景の塗り色などの定数
   src/c/sprite_data.h      … 勇者・武器の文字マップとパレット表（gfx.c 専用）
   src/c/font_data.h        … ドットフォント（gfx.c 専用）
+  src/c/qr_data.h          … 支援ページのURLのQRコード
 """
 import os
 import sys
@@ -22,6 +23,7 @@ import gb_sprites  # noqa: E402
 import gb_scenes  # noqa: E402
 import gb_font  # noqa: E402
 import gb_items  # noqa: E402
+import gb_qr  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMG_DIR = os.path.join(ROOT, 'resources', 'images')
@@ -154,6 +156,23 @@ def write_font_data():
     write_file('font_data.h', lines)
 
 
+# 支援ページ（作者への寄付）。時計にQRを出して、スマホのカメラで読んでもらう
+SUPPORT_URL = 'ko-fi.com/daipoyo'
+
+
+def write_qr_data():
+    rows, version = gb_qr.qr_rows(SUPPORT_URL)
+    lines = list(HEAD)
+    lines.append('// 支援ページ %s の QR（バージョン%d、余白 %dマス込み）' %
+                 (SUPPORT_URL, version, gb_qr.QUIET))
+    lines.append('#define QR_SUPPORT_URL "%s"' % SUPPORT_URL)
+    lines.append('#define QR_SUPPORT_SIZE %d' % len(rows))
+    lines.append('')
+    c_rows(lines, 'QR_SUPPORT', rows, 'QR_SUPPORT_SIZE')
+    write_file('qr_data.h', lines)
+    return len(rows), version
+
+
 def main():
     preview_dir = None
     if '--preview' in sys.argv:
@@ -214,6 +233,8 @@ def main():
     write_art_info(fills)
     write_sprite_data(frames, weapons)
     write_font_data()
+    qr_size, qr_version = write_qr_data()
+    report.append(('qr_data.h  %s' % SUPPORT_URL, (qr_size, qr_version), 2))
 
     # --- 図鑑アイテムの絵（resources/data/item_icons.bin と src/c/item_art.h） ---
     shapes, specials = gb_items.build(ROOT, PAL)

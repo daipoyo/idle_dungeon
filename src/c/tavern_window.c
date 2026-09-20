@@ -33,8 +33,11 @@ static void say(const char *speech) {
   npc_header_say(s_header, speech);
 }
 
+#define ROW_ASK (TAVERN_OFFERS)       // 図鑑から自分で選ぶ
+#define ROW_SUPPORT (TAVERN_OFFERS + 1)   // 作者に一杯おごる
+
 static uint16_t get_num_rows(MenuLayer *menu, uint16_t section, void *data) {
-  return TAVERN_OFFERS + 1;   // 噂3つと「聞き回る」
+  return TAVERN_OFFERS + 2;
 }
 
 static int16_t get_header_height(MenuLayer *menu, uint16_t section, void *data) {
@@ -75,10 +78,19 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   static Item it;   // 描き終わるまで残しておく
   RowSpec row = { .icon = -1 };
 
-  if (index->row >= TAVERN_OFFERS) {
+  if (index->row == ROW_ASK) {
     row.icon = UI_ICON_CODEX;
     row.title = "Ask around";
     snprintf(sub, sizeof(sub), "Pick from the codex");
+    row.sub = sub;
+    gfx_draw_row(ctx, cell, &row);
+    return;
+  }
+  if (index->row == ROW_SUPPORT) {
+    // 現実のお金の話なので、ゴールドの品とは別の行にしてある
+    row.icon = UI_ICON_TAVERN;
+    row.title = "Buy the dev a pint";
+    snprintf(sub, sizeof(sub), "Scan to support");
     row.sub = sub;
     gfx_draw_row(ctx, cell, &row);
     return;
@@ -113,7 +125,12 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
 }
 
 static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
-  if (index->row >= TAVERN_OFFERS) {
+  if (index->row == ROW_SUPPORT) {
+    say("Someone far away built this town.");
+    support_window_push();
+    return;
+  }
+  if (index->row == ROW_ASK) {
     codex_window_push();
     return;
   }
@@ -145,7 +162,7 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
 
 // 長押しで品物の詳細（どんな品か確かめてから決める）
 static void select_long_click(MenuLayer *menu, MenuIndex *index, void *data) {
-  if (index->row >= TAVERN_OFFERS) return;
+  if (index->row >= ROW_ASK) return;
   int entry = game_tavern_offer(index->row);
   if (entry < 0) return;
   Item it = probe_item(entry);

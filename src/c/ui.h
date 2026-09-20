@@ -30,6 +30,7 @@ void stash_window_push(void);     // 保管庫
 void smith_window_push(void);     // 鍛冶屋
 void codex_window_push(void);     // 図鑑
 void tavern_window_push(void);    // 酒場（噂）
+void support_window_push(void);   // 作者への支援（QR）
 
 void agent_window_push(void);     // 回収代行業者
 
