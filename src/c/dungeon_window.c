@@ -35,8 +35,12 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   const DungeonDef *d = &g_dungeons[i];
   bool unlocked = game_dungeon_unlocked(i);
   static char sub[32];
-  if (unlocked) {
-    snprintf(sub, sizeof(sub), "%dF %d steps", d->floors, d->floors * d->steps_per_floor);
+  if (unlocked && game_dungeon_visited(i)) {
+    char total[8];
+    gfx_steps_text(d->floors * d->steps_per_floor, total, sizeof(total));
+    snprintf(sub, sizeof(sub), "%dF  %s steps deep", d->floors, total);
+  } else if (unlocked) {
+    snprintf(sub, sizeof(sub), "%dF  depth unknown", d->floors);
   } else {
     snprintf(sub, sizeof(sub), "Beat %s", g_dungeons[i - 1].monsters[3]);
   }

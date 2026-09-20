@@ -195,6 +195,14 @@ static void draw_status(GContext *ctx, const Layout *L) {
     gfx_draw_mini_icon(ctx, sleep == SLEEP_REFRESHED ? MINI_MOON_REFRESHED : MINI_MOON_RESTED, x + label_w - PX, y);
     label_w += 6 * PX;
   }
+  // ダンジョンでは、最深部までの総歩数（1500 なら 1.5k）。残りはバーで見られるので出さない
+  if (mode != RUN_NONE) {
+    static char total[8];
+    gfx_steps_text(game_run_total_steps(), total, sizeof(total));
+    int tw = gfx_text_width(total) + 3 * PX;
+    gfx_text(ctx, total, GRect(x + label_w, y, tw, LINE_H), GTextAlignmentLeft, THEME_DIM);
+    label_w += tw;
+  }
 
   // 右端から消耗品の数（町では鑑定の巻物も）
   int items = mode == RUN_NONE ? 3 : 2;

@@ -176,6 +176,7 @@ int game_run_position(void);
 int game_run_total_steps(void);
 bool game_dungeon_unlocked(int idx);
 bool game_dungeon_cleared(int idx);
+bool game_dungeon_visited(int idx);   // 一度でも潜ったか（最深部までの歩数を見せてよいか）
 bool game_depart(int idx);
 bool game_use_portal(void);
 void game_walk_back(void);

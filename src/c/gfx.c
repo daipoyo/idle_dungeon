@@ -438,6 +438,13 @@ void gfx_item_row(RowSpec *row, const Item *it, char *name, size_t name_size, ch
   row->warn_sub = !game_item_identified(it);
 }
 
+// 歩数を短く書く（820 / 1.5k / 12k）。狭い行に収めるため
+void gfx_steps_text(int steps, char *buf, size_t size) {
+  if (steps < 1000) snprintf(buf, size, "%d", steps);
+  else if (steps < 10000) snprintf(buf, size, "%d.%dk", steps / 1000, (steps % 1000) / 100);
+  else snprintf(buf, size, "%dk", steps / 1000);
+}
+
 void gfx_item_stat_text(const Item *it, char *buf, size_t size) {
   if (it && !game_item_identified(it)) {
     snprintf(buf, size, "Unidentified");

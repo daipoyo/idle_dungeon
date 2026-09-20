@@ -95,6 +95,8 @@ typedef struct {
   uint16_t sleep_min;       // 昨夜眠った分数
   int32_t saved_steps;      // 町にいる間に貯めた歩数
   uint32_t sleep_day;       // sleep_tier を決めた日の 0時
+  uint8_t visited;          // 一度でも入ったダンジョン（ビット）
+  uint8_t pad_v[3];
 } Hero;
 
 typedef struct {
@@ -1218,6 +1220,13 @@ int game_steps_to_next_floor(void) {
   return (int)(next - s_run.depth);
 }
 
+// ボスを倒したダンジョンは、当然そこへ潜っている（古いセーブのための読み替え）
+bool game_dungeon_visited(int idx) {
+  if (idx < 0 || idx >= DUNGEON_COUNT) return false;
+  if (s_run.mode != RUN_NONE && s_run.dungeon == idx) return true;
+  return ((s_hero.visited | s_hero.cleared) >> idx) & 1;
+}
+
 bool game_dungeon_cleared(int idx) { return (s_hero.cleared >> idx) & 1; }
 
 bool game_dungeon_unlocked(int idx) {
@@ -1648,6 +1657,7 @@ bool game_depart(int idx) {
   if (!game_dungeon_unlocked(idx)) return false;
   s_run.mode = RUN_EXPLORE;
   s_run.dungeon = (uint8_t)idx;
+  s_hero.visited |= (uint8_t)(1 << idx);
   s_run.boss_done = 0;
   s_run.drop_checked = 0;
   s_run.hp = game_max_hp();
