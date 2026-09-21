@@ -9,8 +9,8 @@
 // ============================================================
 static Window *s_window;
 static MenuLayer *s_menu;
-static GBitmap *s_enemy[6];
-static GBitmap *s_enemy_sub[6];
+static GBitmap *s_enemy[ENEMY_ART_COUNT];
+static GBitmap *s_enemy_sub[ENEMY_ART_COUNT];
 
 static uint16_t get_num_rows(MenuLayer *menu, uint16_t section, void *data) {
   return DUNGEON_COUNT;
@@ -46,7 +46,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   }
   RowSpec row = {
     .icon = -1,
-    .bitmap = unlocked ? s_enemy_sub[d->art] : NULL,
+    .bitmap = unlocked ? s_enemy_sub[d->enemy] : NULL,
     .title = unlocked ? d->name : "???",
     .sub = sub,
     .right = game_dungeon_cleared(i) ? "CLEAR" : NULL,
@@ -69,7 +69,7 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
 
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < ENEMY_ART_COUNT; i++) {
     s_enemy[i] = gbitmap_create_with_resource(gfx_enemy_resource(i));
     s_enemy_sub[i] = gbitmap_create_as_sub_bitmap(s_enemy[i], GRect(0, 0, ENEMY_SIZE, ENEMY_SIZE));
   }
@@ -89,7 +89,7 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
   menu_layer_destroy(s_menu);
   s_menu = NULL;
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < ENEMY_ART_COUNT; i++) {
     gbitmap_destroy(s_enemy_sub[i]);
     gbitmap_destroy(s_enemy[i]);
     s_enemy_sub[i] = NULL;

@@ -81,7 +81,8 @@ void gfx_item_stat_text(const Item *it, char *buf, size_t size);
 GColor gfx_rarity_color(const Item *it);
 
 // 敵画像（ENEMY_SIZE 四方 x 2フレーム）のリソースID。番号は背景の絵と同じ
-uint32_t gfx_enemy_resource(int dungeon);
+#define ENEMY_ART_COUNT 8
+uint32_t gfx_enemy_resource(int art);
 
 
 // メニューの1行（カーソル＋アイコン＋タイトル＋サブテキスト＋右端の短い文字）

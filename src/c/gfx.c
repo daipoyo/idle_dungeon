@@ -459,12 +459,13 @@ void gfx_item_stat_text(const Item *it, char *buf, size_t size) {
   if (n > 0 && n <= (int)size) buf[n - 1] = '\0';   // 末尾の空白を消す
 }
 
-uint32_t gfx_enemy_resource(int dungeon) {
-  static const uint32_t ids[DUNGEON_COUNT] = {
+uint32_t gfx_enemy_resource(int art) {
+  static const uint32_t ids[ENEMY_ART_COUNT] = {
     RESOURCE_ID_IMG_ENEMY0, RESOURCE_ID_IMG_ENEMY1, RESOURCE_ID_IMG_ENEMY2,
     RESOURCE_ID_IMG_ENEMY3, RESOURCE_ID_IMG_ENEMY4, RESOURCE_ID_IMG_ENEMY5,
+    RESOURCE_ID_IMG_ENEMY6, RESOURCE_ID_IMG_ENEMY7,
   };
-  return ids[dungeon];
+  return ids[art % ENEMY_ART_COUNT];
 }
 
 // ============================================================

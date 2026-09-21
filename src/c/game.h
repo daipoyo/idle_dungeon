@@ -81,7 +81,8 @@ typedef struct {
   uint8_t floors;
   uint16_t steps_per_floor;
   uint8_t lvl_min, lvl_max;   // 敵のレベル（1階 → 最深部）
-  uint8_t art;                // 背景画像の番号
+  uint8_t art;                // 背景画像の番号（背景は6種類を使い回す）
+  uint8_t enemy;              // 敵の絵の番号（一覧に出す顔）
   const char *monsters[4];    // 3種 + ボス
 } DungeonDef;
 

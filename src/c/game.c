@@ -28,14 +28,14 @@
 // 固定データ
 // ============================================================
 const DungeonDef g_dungeons[DUNGEON_COUNT] = {
-  { "Mossy Cellar",   5, 300,  1,  5, 0, { "Giant Rat", "Cave Bat", "Slime", "Rat King" } },
-  { "Goblin Warren",  6, 350,  5, 10, 1, { "Goblin", "Goblin Archer", "Hobgoblin", "Goblin Chief" } },
-  { "Sunken Crypt",   8, 400, 10, 16, 2, { "Skeleton", "Ghoul", "Wraith", "Bone Lord" } },
-  { "Fungal Caverns", 9, 450, 16, 22, 0, { "Myconid", "Spore Bat", "Mold Beast", "Spore Mother" } },
-  { "Drowned Temple", 10, 500, 22, 28, 4, { "Merfolk", "Sea Snake", "Drowned One", "Tide Priestess" } },
-  { "Ember Forge",    12, 600, 28, 35, 3, { "Fire Imp", "Magma Hound", "Golem", "Iron Colossus" } },
-  { "Frost Spire",    13, 700, 35, 42, 4, { "Ice Wolf", "Frost Troll", "Yeti", "Frost Wyrm" } },
-  { "Abyssal Gate",   15, 800, 42, 50, 5, { "Imp Lord", "Hellhound", "Pit Fiend", "Demon Lord" } },
+  { "Mossy Cellar",   5, 300,  1,  5, 0, 0, { "Giant Rat", "Cave Bat", "Slime", "Rat King" } },
+  { "Goblin Warren",  6, 350,  5, 10, 1, 1, { "Goblin", "Goblin Archer", "Hobgoblin", "Goblin Chief" } },
+  { "Sunken Crypt",   8, 400, 10, 16, 2, 2, { "Skeleton", "Ghoul", "Wraith", "Bone Lord" } },
+  { "Fungal Caverns", 9, 450, 16, 22, 0, 6, { "Myconid", "Spore Bat", "Mold Beast", "Spore Mother" } },
+  { "Drowned Temple", 10, 500, 22, 28, 4, 4, { "Merfolk", "Sea Snake", "Drowned One", "Tide Priestess" } },
+  { "Ember Forge",    12, 600, 28, 35, 3, 3, { "Fire Imp", "Magma Hound", "Golem", "Iron Colossus" } },
+  { "Frost Spire",    13, 700, 35, 42, 4, 7, { "Ice Wolf", "Frost Troll", "Yeti", "Frost Wyrm" } },
+  { "Abyssal Gate",   15, 800, 42, 50, 5, 5, { "Imp Lord", "Hellhound", "Pit Fiend", "Demon Lord" } },
 };
 
 const char *const g_slot_names[EQUIP_SLOTS] = {
