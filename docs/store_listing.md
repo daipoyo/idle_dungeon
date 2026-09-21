@@ -68,6 +68,36 @@ Requires a Pebble Time 2 and step data from Pebble Health.
 
 Pebble Time 2 と、Pebble ヘルスの歩数が必要です。
 
+## Planned updates (English)
+
+Ideas being worked on, in rough order. No dates, and nothing here is a promise.
+
+- Round watches: a layout that fits the curve, so the new round Pebble is
+  supported as well as the Time 2.
+- A town that grows: donate your gold to build the place up, unlocking
+  facilities as it goes - the tavern being the first of them.
+- Somewhere for late-game gold to go, so a long save does not end up with
+  millions and nothing to spend it on.
+- Share a rumour with a friend: a QR code on your watch that tells their hero
+  where to look for something you found.
+- Backgrounds of their own for the fungal caves and the frozen spire, which
+  currently borrow from other dungeons.
+- Black-and-white watches, if the artwork can be made to read without colour.
+- An alert that reaches you with the app closed, for when the hero is in danger.
+
+## 今後の予定(日本語)
+
+検討中のものを、だいたいの順に並べています。時期は未定で、すべて実装をお約束するものではありません。
+
+- **丸型の時計に対応。** 丸い画面に合わせた画面配置にして、新しい丸型のPebbleでも遊べるようにします。
+- **町が育つ仕組み。** 貯まったゴールドを町に寄付すると施設が増えていきます。最初に建つのは酒場です。
+- **終盤のゴールドの使い道。** 長く遊ぶと数百万Gが余ってしまうので、使い道を用意します。
+- **噂を友達に渡す。** 時計にQRコードを表示して、自分が見つけた品の在りかを相手の勇者に伝えられる
+  ようにします。
+- **専用の背景。** キノコの洞窟と氷の尖塔は、今は他のダンジョンの背景を使い回しています。
+- **白黒の時計への対応。** 絵が色なしでも読めるようにできれば。
+- **アプリを閉じていても届く警告。** 勇者が危ないときに知らせます。
+
 ## What's new (1.0.0)
 
 First release.
