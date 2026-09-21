@@ -542,8 +542,8 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   GColor sub = row->dim ? THEME_DIM : THEME_SUB;
   if (row->warn_sub) sub = THEME_WARN;
   if (row->tint_sub && !row->dim) sub = row->sub_color;
-  // レア度の色は、選んでいない行のタイトルにだけ使う（選択中は反転して見えるため）
-  GColor title_fg = (row->tint_title && !row->dim && !hi) ? row->title_color : fg;
+  // レア度の色は選んでいる行でもそのまま出す（選んでいることはカーソルで分かる）
+  GColor title_fg = (row->tint_title && !row->dim) ? row->title_color : fg;
 
   int right_w = 0;
   if (row->compare != CMP_NONE && !row->right) {
