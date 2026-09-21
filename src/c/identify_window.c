@@ -59,7 +59,7 @@ static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
 
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *data) {
   static char sub[32];
-  RowSpec row = { .icon = -1 };
+  RowSpec row = { .icon = -1, .enemy = -1 };
   int bag = unident_index(index->row);
   const Item *it = bag >= 0 ? game_bag(bag) : NULL;
   if (!it) {

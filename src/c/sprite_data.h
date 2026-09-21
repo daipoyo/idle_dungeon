@@ -336,3 +336,129 @@ static const char *const GEAR_OFF_FOCUS[HERO_MAP_H] = {
   "............",
   "............",
 };
+
+#define ENEMY_MAP_COUNT 8
+#define ENEMY_MAP_SIZE 12
+static const char *const ENEMY_0[ENEMY_MAP_SIZE] = {
+  "............",
+  "............",
+  "............",
+  ".....KK.....",
+  "....KGLK....",
+  "...KGGGGK...",
+  "..KGLGGGGK..",
+  ".KGKLGGKGGK.",
+  ".KGKLGGKGGK.",
+  "KGGGGGGGGGdK",
+  "KdGGGGGGGddK",
+  ".KKKKKKKKKK.",
+};
+
+static const char *const ENEMY_1[ENEMY_MAP_SIZE] = {
+  "............",
+  "K..........K",
+  "KEK.KKKK.KEK",
+  ".KEKEEEEKEK.",
+  "..KEEEEEEK..",
+  "..KYKEYEEK..",
+  "..KEEEEEEK..",
+  "...KYKYEK...",
+  "..KoooooK...",
+  ".KEKoooKE...",
+  "..KoKoKoK...",
+  "..KK...KK...",
+};
+
+static const char *const ENEMY_2[ENEMY_MAP_SIZE] = {
+  "....KKKK....",
+  "...KWWWWK...",
+  "..KWWWWWWg..",
+  "..WKKWKKWg..",
+  "..WWWWWWWg..",
+  "...WKWKWK...",
+  "....KWWK....",
+  "..W.WWWW.W..",
+  ".KW..WW..WK.",
+  "....WWWW....",
+  "....W..W....",
+  "...WW..WW...",
+};
+
+static const char *const ENEMY_3[ENEMY_MAP_SIZE] = {
+  "............",
+  ".......K....",
+  "..KK..KrK...",
+  ".KRRK.KrrK..",
+  "KYRRRKKrrrK.",
+  "KRRRRRRKKK..",
+  ".KKRRRRRRRK.",
+  "..KYYYRRRRRK",
+  "..KYYYRRRRK.",
+  "...KYYRRRK..",
+  "...KRKKRK...",
+  "...KK.KK....",
+};
+
+static const char *const ENEMY_4[ENEMY_MAP_SIZE] = {
+  "............",
+  "....KKKK....",
+  "...KCuuuK...",
+  "..KCuuuuuK..",
+  "..Cuuuuuuu..",
+  "..uKuuKuuu..",
+  "..uuuuuuuu..",
+  "..BBBBBBBB..",
+  "..u.u..u.u..",
+  "...u.u..u...",
+  "..u.u..u.u..",
+  "............",
+};
+
+static const char *const ENEMY_5[ENEMY_MAP_SIZE] = {
+  "............",
+  "..p......p..",
+  "...p.KK.p...",
+  "....KWWK....",
+  "...KWWWWK...",
+  "..KWWRRWWK..",
+  "..KWRKKRWK..",
+  "..KWWRRWWK..",
+  "...KWWWWK...",
+  "....KppK....",
+  "...p.pp.p...",
+  "..p..p...p..",
+};
+
+static const char *const ENEMY_6[ENEMY_MAP_SIZE] = {
+  "............",
+  "...KKKKKK...",
+  "..KRRWRRRK..",
+  ".KRRRRWRRRK.",
+  "KRRRWRRRRRWK",
+  "KrrrrrrrrrrK",
+  "....KWWWK...",
+  "....KWWWK...",
+  "....KWWWK...",
+  "...KWWWWWK..",
+  "..KWWWWWWWK.",
+  "..KKKKKKKKK.",
+};
+
+static const char *const ENEMY_7[ENEMY_MAP_SIZE] = {
+  "............",
+  "...BBBBBB...",
+  "..BWWWWWWB..",
+  ".BWWKWWKWWB.",
+  ".BWWWWWWWWB.",
+  ".BWWBBBBWWB.",
+  "BBWWWWWWWWBB",
+  "BWBWWWWWWBWB",
+  "BWBWWWWWWBWB",
+  "BBWWWWWWWWBB",
+  "..BWWB.BWWB.",
+  "..BBBB.BBBB.",
+};
+
+static const char *const *const ENEMY_MAPS[ENEMY_MAP_COUNT] = {
+  ENEMY_0, ENEMY_1, ENEMY_2, ENEMY_3, ENEMY_4, ENEMY_5, ENEMY_6, ENEMY_7,
+};

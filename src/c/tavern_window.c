@@ -76,7 +76,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   static char name[40];
   static char sub[40];
   static Item it;   // 描き終わるまで残しておく
-  RowSpec row = { .icon = -1 };
+  RowSpec row = { .icon = -1, .enemy = -1 };
 
   if (index->row == ROW_ASK) {
     row.icon = UI_ICON_CODEX;

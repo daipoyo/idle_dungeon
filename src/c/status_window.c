@@ -143,7 +143,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     draw_card(ctx, cell);
     return;
   }
-  RowSpec row = { .icon = -1 };
+  RowSpec row = { .icon = -1, .enemy = -1 };
   const Item *it;
   if (index->section == 1) {
     it = game_equipped(index->row);

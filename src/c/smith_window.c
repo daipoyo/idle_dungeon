@@ -108,7 +108,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   static char name[40];
   static char sub[32];
   static char stats[24];
-  RowSpec row = { .icon = -1 };
+  RowSpec row = { .icon = -1, .enemy = -1 };
   const Item *it = item_at(index->section, index->row);
   if (!it) {
     row.title = "Nothing here";

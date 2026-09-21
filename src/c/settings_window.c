@@ -21,7 +21,7 @@ static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
 
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *data) {
   static char sub[24];
-  RowSpec row = { .icon = -1 };
+  RowSpec row = { .icon = -1, .enemy = -1 };
   if (index->row == 0) {
     row.title = "Auto Return";
     int pct = game_auto_return_pct();

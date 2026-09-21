@@ -459,13 +459,9 @@ void gfx_item_stat_text(const Item *it, char *buf, size_t size) {
   if (n > 0 && n <= (int)size) buf[n - 1] = '\0';   // 末尾の空白を消す
 }
 
-uint32_t gfx_enemy_resource(int art) {
-  static const uint32_t ids[ENEMY_ART_COUNT] = {
-    RESOURCE_ID_IMG_ENEMY0, RESOURCE_ID_IMG_ENEMY1, RESOURCE_ID_IMG_ENEMY2,
-    RESOURCE_ID_IMG_ENEMY3, RESOURCE_ID_IMG_ENEMY4, RESOURCE_ID_IMG_ENEMY5,
-    RESOURCE_ID_IMG_ENEMY6, RESOURCE_ID_IMG_ENEMY7,
-  };
-  return ids[art % ENEMY_ART_COUNT];
+void gfx_draw_enemy(GContext *ctx, int art, int x, int y) {
+  if (art < 0 || art >= ENEMY_MAP_COUNT) return;
+  gfx_draw_charmap(ctx, ENEMY_MAPS[art], ENEMY_MAP_SIZE, ENEMY_MAP_SIZE, x, y, PX, false, NULL);
 }
 
 // ============================================================
@@ -537,10 +533,8 @@ void gfx_draw_row(GContext *ctx, const Layer *cell, const RowSpec *row) {
   } else if (row->icon >= 0) {
     gfx_draw_ui_icon(ctx, row->icon, x - PX, SNAP((b.size.h - ITEM_ICON_SIZE) / 2));
     x += ITEM_ICON_SIZE + PX;
-  } else if (row->bitmap) {
-    graphics_context_set_compositing_mode(ctx, GCompOpSet);
-    graphics_draw_bitmap_in_rect(ctx, row->bitmap,
-                                 GRect(x, SNAP((b.size.h - ENEMY_SIZE) / 2), ENEMY_SIZE, ENEMY_SIZE));
+  } else if (row->enemy >= 0) {
+    gfx_draw_enemy(ctx, row->enemy, x, SNAP((b.size.h - ENEMY_SIZE) / 2));
     x += ENEMY_SIZE + 2 * PX;
   }
 

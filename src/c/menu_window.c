@@ -63,7 +63,7 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   int n = build_commands(cmds);
   if (index->row >= n) return;
   static char sub[32];
-  RowSpec row = { .icon = -1 };
+  RowSpec row = { .icon = -1, .enemy = -1 };
   switch (cmds[index->row]) {
     case CMD_DUNGEONS:
       row.icon = UI_ICON_DUNGEONS;

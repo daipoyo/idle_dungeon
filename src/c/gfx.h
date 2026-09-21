@@ -80,9 +80,9 @@ void gfx_item_stat_text(const Item *it, char *buf, size_t size);
 // レア度の色（白・青・黄・緑・金）
 GColor gfx_rarity_color(const Item *it);
 
-// 敵画像（ENEMY_SIZE 四方 x 2フレーム）のリソースID。番号は背景の絵と同じ
+// 敵の絵（ENEMY_SIZE 四方）。画像ではなく文字マップなので、読み込みが要らない
 #define ENEMY_ART_COUNT 8
-uint32_t gfx_enemy_resource(int art);
+void gfx_draw_enemy(GContext *ctx, int art, int x, int y);
 
 
 // メニューの1行（カーソル＋アイコン＋タイトル＋サブテキスト＋右端の短い文字）
@@ -90,7 +90,7 @@ uint32_t gfx_enemy_resource(int art);
 typedef struct {
   int icon;            // 画面用のアイコン UI_ICON_*（-1 でなし）
   const Item *item;    // 図鑑アイテムの絵（icon より優先。NULL 可）
-  GBitmap *bitmap;     // アイコンの代わりに描く ENEMY_SIZE 四方の画像（NULL 可）
+  int enemy;           // アイコンの代わりに描く敵の絵の番号（-1 でなし）
   const char *title;
   const char *sub;
   const char *right;   // NULL 可

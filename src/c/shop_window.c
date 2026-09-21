@@ -81,7 +81,7 @@ static int16_t get_cell_height(MenuLayer *menu, MenuIndex *index, void *data) {
 static void draw_buy_row(GContext *ctx, const Layer *cell, int r) {
   static char sub[32];
   static char right[8];
-  RowSpec row = { .icon = -1 };
+  RowSpec row = { .icon = -1, .enemy = -1 };
   right[0] = '\0';
   if (r == BUY_POTION) {
     row.icon = UI_ICON_POTION;
@@ -125,7 +125,7 @@ static void draw_sell_row(GContext *ctx, const Layer *cell, int r) {
   static char name[40];
   static char stats[24];
   static char sub[32];
-  RowSpec row = { .icon = -1 };
+  RowSpec row = { .icon = -1, .enemy = -1 };
   const Item *it = game_bag(r);
   if (!it) {
     row.title = "Nothing to sell";

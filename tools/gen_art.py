@@ -105,6 +105,14 @@ def write_art_info(fills):
     write_file('art_info.h', lines)
 
 
+def enemy_rows():
+    """敵の絵を文字マップにする（一覧に出す1コマ目だけ）。"""
+    out = []
+    for a, _b in gb_sprites.enemies():
+        out.append([''.join('.' if c is None else c for c in row) for row in a])
+    return out
+
+
 def write_sprite_data(frames, weapons):
     lines = list(HEAD)
     lines.append('#include <stdint.h>')
@@ -133,6 +141,16 @@ def write_sprite_data(frames, weapons):
         c_rows(lines, 'WPN_' + name, rows, str(len(rows)))
     for name, rows in gb_sprites.gear_overlays().items():
         c_rows(lines, 'GEAR_' + name, rows, 'HERO_MAP_H')
+    # 敵（一覧に出す顔）。画像にすると 64KB 機でヒープが足りなくなるので文字マップで持つ
+    enemies = enemy_rows()
+    lines.append('#define ENEMY_MAP_COUNT %d' % len(enemies))
+    lines.append('#define ENEMY_MAP_SIZE %d' % gb_sprites.ENEMY_SIZE)
+    for i, rows in enumerate(enemies):
+        c_rows(lines, 'ENEMY_%d' % i, rows, 'ENEMY_MAP_SIZE')
+    lines.append('static const char *const *const ENEMY_MAPS[ENEMY_MAP_COUNT] = {')
+    lines.append('  ' + ', '.join('ENEMY_%d' % i for i in range(len(enemies))) + ',')
+    lines.append('};')
+    lines.append('')
     write_file('sprite_data.h', lines)
 
 
@@ -187,11 +205,6 @@ def main():
 
     cell = gb_sprites.ICON_SIZE * PX
 
-    # --- 敵 (1種につき2フレームを横に並べる) ---
-    esz = gb_sprites.ENEMY_SIZE * PX
-    enemies = [(grid_image(a), grid_image(b)) for a, b in gb_sprites.enemies()]
-    for i, (a, b) in enumerate(enemies):
-        out('enemy%d.png' % i, sheet([a, b], 2, esz, esz))
 
     # --- 宝箱 ---
     chests = [grid_image(g) for g in gb_sprites.chests()]
