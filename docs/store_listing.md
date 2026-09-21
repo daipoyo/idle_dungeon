@@ -25,8 +25,9 @@ shows you what you missed when you next open it. Nothing to tap, nothing to grin
 - **Sleep well and the day goes better.** Six hours of sleep makes the hero
   Rested, seven makes them Refreshed: more experience, more gold, better finds.
 - **1000 items to find.** 150 shapes across six materials, plus 64 uniques and 12
-  three-piece sets with their own art and effects. Rare gear drops unidentified;
-  the appraiser will tell you what you carried home.
+  three-piece sets with their own art and effects. Rare gear drops unidentified:
+  carry it home to the appraiser, or read an identify scroll where you stand and
+  wear it on the spot - gear can be changed anywhere, dungeon included.
 - **Hunt what you are missing.** The tavern trades in rumours: pay for a lead and
   that item starts turning up where it drops. The codex tells you where to look.
 - **Real risk.** Run out of health and your gear stays where you fell. Walk back
@@ -53,7 +54,8 @@ Requires a Pebble Time 2 and step data from Pebble Health.
 - **よく眠るとその日が変わる。** 6時間で Rested、7時間で Refreshed。経験値もゴールドも増え、
   良い物が出やすくなります。
 - **1000種のアイテム図鑑。** 150種の形 × 6段階の素材に、固有装備64種とセット装備12組。
-  レア装備は未鑑定で落ち、鑑定屋に持ち込んで初めて正体が分かります。
+  レア装備は未鑑定で落ちます。町の鑑定屋に持ち帰るか、鑑定の巻物を使えばダンジョンの中でも
+  その場で正体が分かり、そのまま装備できます。
 - **足りない物を狙う。** 酒場では噂が買えます。狙いを定めると、その品が出る場所で見つかりやすく
   なります。どこへ行けばよいかは図鑑が教えてくれます。
 - **死ねば失う。** HPが尽きるとその場に装備を落とします。歩いて取りに戻るか、代行業者に頼むか。
