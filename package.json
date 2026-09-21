@@ -11,10 +11,7 @@
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
-      "basalt",
-      "chalk",
-      "emery",
-      "gabbro"
+      "emery"
     ],
     "watchapp": {
       "watchface": false
