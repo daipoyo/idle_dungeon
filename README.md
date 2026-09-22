@@ -80,7 +80,7 @@ The tavern in the game has the same link as a QR code.
 
 ## License
 
-Not licensed for reuse yet. If you want to build on it, open an issue and ask.
+[MIT](LICENSE) — code and art alike. Port it, pick it apart, build on it.
 
 ---
 
