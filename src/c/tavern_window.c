@@ -46,7 +46,9 @@ static int16_t get_header_height(MenuLayer *menu, uint16_t section, void *data) 
 
 static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void *data) {
   static char buf[32];
-  snprintf(buf, sizeof(buf), "RUMOURS %ldG", (long)game_gold());
+  // 噂の枠の空きも出す。いっぱいなのに買おうとして止まるのを防ぐ
+  snprintf(buf, sizeof(buf), "RUMOURS %ldG %d/%d", (long)game_gold(), game_rumour_count(),
+           RUMOUR_SLOTS);
   gfx_draw_header(ctx, cell, buf);
 }
 
@@ -146,7 +148,7 @@ static void select_click(MenuLayer *menu, MenuIndex *index, void *data) {
       ui_state_changed();
       break;
     case RUMOUR_FULL:
-      say("You're chasing enough already.");
+      say("Three tales at once? Drop one first.");
       vibes_short_pulse();
       break;
     case RUMOUR_NO_GOLD:
