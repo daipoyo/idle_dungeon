@@ -31,6 +31,10 @@ static void update_body(Layer *layer, GContext *ctx) {
   y += gfx_text(ctx, buf, GRect(in.origin.x, y, in.size.w, LINE_H * 2), align, THEME_FG) * LINE_H;
   snprintf(buf, sizeof(buf), "%d items left behind", game_drop_item_count());
   y += gfx_text(ctx, buf, GRect(in.origin.x, y, in.size.w, LINE_H * 2), align, THEME_SUB) * LINE_H;
+  int need = game_agent_slots_needed(), free_slots = game_agent_slots_free();
+  snprintf(buf, sizeof(buf), "Needs %d slots (have %d)", need, free_slots);
+  y += gfx_text(ctx, buf, GRect(in.origin.x, y, in.size.w, LINE_H * 2), align,
+                need > free_slots ? THEME_WARN : THEME_SUB) * LINE_H;
   int32_t left = game_drop_seconds_left();
   snprintf(buf, sizeof(buf), "Gone in %ldh %02ldm", (long)(left / 3600), (long)(left / 60 % 60));
   y += gfx_text(ctx, buf, GRect(in.origin.x, y, in.size.w, LINE_H), align, THEME_WARN) * LINE_H;
@@ -62,7 +66,7 @@ static void select_click(ClickRecognizerRef rec, void *ctx) {
       ui_back_to_scene();
       return;
     case AGENT_NO_GOLD: refresh("No gold, no rescue."); break;
-    case AGENT_NO_ROOM: refresh("Make room in your bag first."); break;
+    case AGENT_NO_ROOM: refresh("Bag and stash are both full."); break;
     case AGENT_NONE: refresh(game_drop_exists() ? "Not while you're out there." : "Nothing to fetch. Stay alive."); break;
   }
   vibes_short_pulse();
@@ -86,7 +90,7 @@ static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect b = layer_get_bounds(root);
   s_confirm = false;
-  const char *greeting = game_drop_exists() ? "Lost your gear? I know the way." : "Nothing to fetch. Stay alive.";
+  const char *greeting = game_drop_exists() ? "What won't fit, I leave in your stash." : "Nothing to fetch. Stay alive.";
   s_header = npc_header_create(GRect(0, 0, b.size.w, NPC_HEADER_H), RESOURCE_ID_IMG_FACE_AGENT, greeting);
   layer_add_child(root, s_header);
   s_body = layer_create(GRect(0, NPC_HEADER_H, b.size.w, b.size.h - NPC_HEADER_H));

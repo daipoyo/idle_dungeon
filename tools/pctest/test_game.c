@@ -891,6 +891,86 @@ static void test_tavern(void) {
   check(game_buy_tavern(2) == RUMOUR_NO_GOLD, "no coin, no story");
 }
 
+// 死んだ場所に装備9個 + 持ち物24個 = 33個を残した状態を作る
+static void make_full_drop(void) {
+  memset(&s_drop, 0, sizeof(s_drop));
+  memset(s_drop_equip, 0, sizeof(s_drop_equip));
+  memset(s_drop_bag, 0, sizeof(s_drop_bag));
+  s_drop.active = 1;
+  s_drop.dungeon = 2;
+  s_drop.time = (uint32_t)time(NULL);
+  for (int slot = 0; slot < EQUIP_SLOTS; slot++) {
+    for (int sh = 0; sh < SHAPE_COUNT; sh++) {
+      if (g_shapes[sh].slot != slot) continue;
+      s_drop_equip[slot] = make_item(sh, 20);
+      break;
+    }
+  }
+  s_drop_equip[SLOT_RING2] = make_item(SH_MOON_RING, 20);   // 指輪は2枠とも埋まる
+  for (int i = 0; i < BAG_SIZE; i++) s_drop_bag[i] = make_item(SH_KNIFE, 20);
+}
+
+static void test_agent(void) {
+  puts("Retrieval agent");
+  reset_game(97);
+  make_full_drop();
+  // 勇者は全部位に装備をつけ直していて、持ち物も保管庫も空
+  for (int slot = 0; slot < EQUIP_SLOTS; slot++) {
+    for (int sh = 0; sh < SHAPE_COUNT; sh++) {
+      if (g_shapes[sh].slot != slot) continue;
+      s_equip[slot] = make_item(sh, 10);
+      break;
+    }
+  }
+  s_equip[SLOT_RING2] = make_item(SH_MOON_RING, 10);
+  memset(s_bag, 0, sizeof(s_bag));
+  memset(s_stash, 0, sizeof(s_stash));
+  s_hero.gold = 999999;
+
+  int left_behind = game_drop_item_count();
+  printf("  %d items are lying where the hero fell\n", left_behind);
+  check(left_behind == EQUIP_SLOTS + BAG_SIZE, "33 items are lying where the hero fell");
+  printf("  needs %d slots, %d free (bag %d + stash %d)\n", game_agent_slots_needed(),
+         game_agent_slots_free(), BAG_SIZE - game_bag_count(), STASH_SIZE - game_stash_count());
+  check(game_agent_slots_needed() > BAG_SIZE, "more items than the bag alone can hold");
+  check(game_agent_check() == AGENT_OK, "the agent will still fetch them");
+
+  check(game_hire_agent() == AGENT_OK, "hiring works");
+  check(!game_drop_exists(), "nothing is left behind");
+  printf("  after the fetch: bag %d/%d, stash %d/%d\n", game_bag_count(), BAG_SIZE,
+         game_stash_count(), STASH_SIZE);
+  check(game_bag_count() + game_stash_count() == left_behind,
+        "every item came home, the overflow in the stash");
+
+  // 持ち物も保管庫もいっぱいなら断られる
+  reset_game(98);
+  make_full_drop();
+  s_hero.gold = 999999;
+  for (int i = 0; i < BAG_SIZE; i++) s_bag[i] = make_item(SH_KNIFE, 5);
+  for (int i = 0; i < STASH_SIZE; i++) s_stash[i] = make_item(SH_KNIFE, 5);
+  check(game_agent_check() == AGENT_NO_ROOM, "with both full, the agent says so");
+
+  // お金が足りない場合
+  memset(s_bag, 0, sizeof(s_bag));
+  memset(s_stash, 0, sizeof(s_stash));
+  s_hero.gold = 0;
+  check(game_agent_check() == AGENT_NO_GOLD, "and gold comes first");
+
+  // 歩いて取りに戻るときは保管庫を使わない（ダンジョンの中なので）
+  reset_game(99);
+  make_full_drop();
+  memset(s_bag, 0, sizeof(s_bag));
+  memset(s_stash, 0, sizeof(s_stash));
+  memset(s_equip, 0, sizeof(s_equip));
+  game_depart(2);
+  s_run.depth = s_drop.depth;
+  recover_drop();
+  printf("  walking back: bag %d/%d, stash %d, still on the ground %d\n", game_bag_count(), BAG_SIZE,
+         game_stash_count(), game_drop_item_count());
+  check(game_stash_count() == 0, "walking back never fills the stash");
+  s_run.mode = RUN_NONE;
+}
+
 // 実際に歩いて遊んだときの様子（バランス確認）
 //   margin: ダンジョン選びの強気さ（敵のレベルが「勇者のレベル + margin」までなら入る）
 static void play_days(int days, int margin, bool verbose) {
@@ -951,6 +1031,7 @@ int main(void) {
   test_codex_states();
   test_rumours();
   test_tavern();
+  test_agent();
   test_saved_steps();
   test_sleep();
   test_compare();

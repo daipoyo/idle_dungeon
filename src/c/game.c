@@ -1521,18 +1521,29 @@ static void return_event(void) {
 }
 
 // 残した物を、空いている装備枠と持ち物に戻す。戻せた数を返す
-static int take_drop(void) {
+// 保管庫の末尾に足す（代行業者が持ち物に入らない分を置いていくため）
+static bool stash_add(const Item *it) {
+  int n = game_stash_count();
+  if (n >= STASH_SIZE) return false;
+  s_stash[n] = *it;
+  codex_mark(it);
+  s_dirty = true;
+  return true;
+}
+
+// 残した物を回収する。use_stash なら、持ち物に入らない分を保管庫へ入れる（町にいるときだけ）
+static int take_drop(bool use_stash) {
   int taken = 0;
   for (int i = 0; i < EQUIP_SLOTS; i++) {
     if (!s_drop_equip[i].base) continue;
     if (!s_equip[i].base) s_equip[i] = s_drop_equip[i];
-    else if (!bag_add(&s_drop_equip[i])) continue;
+    else if (!bag_add(&s_drop_equip[i]) && !(use_stash && stash_add(&s_drop_equip[i]))) continue;
     memset(&s_drop_equip[i], 0, sizeof(Item));
     taken++;
   }
   for (int i = 0; i < BAG_SIZE; i++) {
     if (!s_drop_bag[i].base) continue;
-    if (!bag_add(&s_drop_bag[i])) continue;
+    if (!bag_add(&s_drop_bag[i]) && !(use_stash && stash_add(&s_drop_bag[i]))) continue;
     memset(&s_drop_bag[i], 0, sizeof(Item));
     taken++;
   }
@@ -1550,7 +1561,7 @@ int game_drop_item_count(void) {
 
 static void recover_drop(void) {
   s_run.drop_checked = 1;
-  int taken = take_drop();
+  int taken = take_drop(false);
   add_gold(s_drop.gold);
   s_drop.gold = 0;
   int left = game_drop_item_count();
@@ -1920,14 +1931,24 @@ int32_t game_drop_fee(void) {
   return 100 * (s_drop.dungeon + 1) + value / 4;
 }
 
-AgentResult game_agent_check(void) {
-  if (!s_drop.active || s_run.mode != RUN_NONE) return AGENT_NONE;
-  if (s_hero.gold < game_drop_fee()) return AGENT_NO_GOLD;
-  // 全部を持ち帰れるだけの空きが必要
+// 代行業者に頼むのに要る空き枠。身に着けていない部位の装備は、そのまま着せ直すので枠が要らない
+int game_agent_slots_needed(void) {
+  if (!s_drop.active) return 0;
   int need = 0;
   for (int i = 0; i < EQUIP_SLOTS; i++) if (s_drop_equip[i].base && s_equip[i].base) need++;
   for (int i = 0; i < BAG_SIZE; i++) if (s_drop_bag[i].base) need++;
-  if (game_bag_count() + need > BAG_SIZE) return AGENT_NO_ROOM;
+  return need;
+}
+
+// 持ち物と保管庫の空きの合計（入らない分は保管庫に置いていってもらう）
+int game_agent_slots_free(void) {
+  return (BAG_SIZE - game_bag_count()) + (STASH_SIZE - game_stash_count());
+}
+
+AgentResult game_agent_check(void) {
+  if (!s_drop.active || s_run.mode != RUN_NONE) return AGENT_NONE;
+  if (s_hero.gold < game_drop_fee()) return AGENT_NO_GOLD;
+  if (game_agent_slots_needed() > game_agent_slots_free()) return AGENT_NO_ROOM;
   return AGENT_OK;
 }
 
@@ -1935,7 +1956,7 @@ AgentResult game_hire_agent(void) {
   AgentResult check = game_agent_check();
   if (check != AGENT_OK) return check;
   s_hero.gold -= game_drop_fee();
-  int taken = take_drop();
+  int taken = take_drop(true);   // 入らない分は保管庫へ
   s_hero.gold += s_drop.gold;
   s_drop.active = 0;
   s_drop.gold = 0;
